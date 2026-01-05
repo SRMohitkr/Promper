@@ -10,9 +10,11 @@
     <meta name="description" content="A beautiful, local-storage based prompt organizer.">
     <meta name="description" content="A beautiful, local-storage based prompt organizer.">
 
-    <!-- Performance Optimization: Preconnect to CDNs -->
-    <link rel="preconnect" href="https://unpkg.com">
-    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    <!-- Performance Optimization: Preconnect & Prefetch -->
+    <link rel="dns-prefetch" href="https://unpkg.com">
+    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+    <link rel="preconnect" href="https://unpkg.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 
     <!-- Deferred Scripts in Head for better LCP -->
     <script src="https://unpkg.com/compromise" defer></script>
@@ -48,7 +50,8 @@
         <div class="auth-card glass-panel">
             <div class="auth-header">
                 <div class="auth-icon-new">
-                    <img src="logo.png" alt="Promper Saver Logo" class="brand-logo-img" width="64" height="64">
+                    <img src="logo.png" alt="Promper Saver Logo" class="brand-logo-img" width="64" height="64"
+                        loading="lazy" decoding="async">
                 </div>
                 <h2>Welcome to Promper Saver</h2>
                 <p>Sign in to sync your prompts across all your devices.</p>
@@ -168,7 +171,8 @@
             <!-- Full Professional Navbar -->
             <nav class="shared-navbar glass-panel">
                 <div class="nav-brand">
-                    <img src="logo.png" alt="Promper Saver Logo" class="brand-logo-img small" width="32" height="32">
+                    <img src="logo.png" alt="Promper Saver Logo" class="brand-logo-img small" width="32" height="32"
+                        decoding="async">
                     <span class="brand-name">Promper Saver</span>
                 </div>
                 <div class="nav-actions">
@@ -178,8 +182,8 @@
             <div class="glass-panel shared-card-wrapper">
                 <div class="shared-header">
                     <div class="logo-area small">
-                        <img src="logo.png" alt="Promper Saver Logo" class="brand-logo-img micro" width="24"
-                            height="24">
+                        <img src="logo.png" alt="Promper Saver Logo" class="brand-logo-img micro" width="24" height="24"
+                            decoding="async">
                         <span>Shared via Promper Saver</span>
                     </div>
                 </div>
@@ -200,7 +204,8 @@
         <!-- Header -->
         <header class="glass-panel">
             <div class="logo-area">
-                <img src="logo.png" alt="Promper Saver Logo" class="brand-logo-img" width="42" height="42">
+                <img src="logo.png" alt="Promper Saver Logo" class="brand-logo-img" width="42" height="42"
+                    fetchpriority="high" decoding="async">
                 <h1>Promper Saver</h1>
             </div>
 

@@ -726,7 +726,7 @@ function setupEventListeners() {
     }
 
     lastScrollY = window.scrollY;
-  });
+  }, { passive: true });
 
   // Custom Dropdown Logic
   setupCustomDropdown(customCategoryDropdown, (val) => {
@@ -802,10 +802,14 @@ function setupEventListeners() {
   }
 
   // Re-calculate visible rows on resize to keep exactly 3 rows if not expanded
+  let resizeTimer;
   window.addEventListener('resize', () => {
-    if (!isGridExpanded && resultsForResizeCheck > 0) {
-      renderPrompts(searchInput.value, currentFilter);
-    }
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      if (!isGridExpanded && resultsForResizeCheck > 0) {
+        renderPrompts(searchInput.value, currentFilter);
+      }
+    }, 250); // Debounce resize to prevent layout thrashing
   });
 
   // Preview Modal click outside
@@ -1842,7 +1846,9 @@ This is your personal prompt library — built to help you think, create, and mo
           </div>
       </div>
     `;
-    grid.appendChild(card);
+    requestAnimationFrame(() => {
+      grid.appendChild(card);
+    });
   });
 }
 
