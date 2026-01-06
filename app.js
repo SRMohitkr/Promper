@@ -1594,58 +1594,8 @@ function updateDropdownSelection(dropdown, value) {
 let resultsForResizeCheck = 0; // Global for resize listener
 
 function renderPrompts(filterText = '', categoryFilter = 'all') {
-  grid.innerHTML = '';
-
-  // TASK 2: Pinned Welcome Prompt (Additive)
-  // Show if library is empty, not dismissed, and we are in the main 'All Prompts' view
-  const isDismissed = localStorage.getItem('welcomeCardDismissed') === 'true';
-  const hasPrompts = prompts.length > 0;
-  if (!isDismissed && !hasPrompts && !filterText && categoryFilter === 'all' && !activeFolderId) {
-    const pinnedCard = document.createElement('div');
-    pinnedCard.className = 'prompt-card pinned-guide-card';
-    pinnedCard.innerHTML = `
-        <div class="card-header">
-    <div class="card-title">👋 Welcome to Promper Saver</div>
-    <div class="card-actions">
-        <button class="icon-btn" onclick="dismissWelcomeCard(event)" title="Dismiss Welcome Guide">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-        </button>
-    </div>
-</div>
-
-<div class="category-badge">
-    Getting Started
-</div>
-
-<div class="card-body">
-This is your personal prompt library — built to help you think, create, and move faster. 🚀
-    <br><br>
-    • <strong>Save</strong> your best ChatGPT prompts in seconds.<br>
-    • <strong>Organize</strong> them using tags & categories.<br>
-    • <strong>Reuse</strong> and <strong>copy</strong> prompts with one click.<br>
-    <br>
-    Start by adding your first prompt above 👆
-</div>
-
-<div class="card-footer">
-    <div class="tags">
-        <span class="tag">#welcome</span>
-        <span class="tag">#guide</span>
-    </div>
-</div>
-
-      `;
-    grid.appendChild(pinnedCard);
-  }
-
-  // --- Hybrid Fuzzy Search Logic (Fuse.js) ---
-  const query = (filterText || '').trim();
-  let results = [];
-
   // 1. Prepare Data for Search
+  const query = (filterText || '').trim();
   const searchItems = prompts
     .filter(p => {
       const pCat = (p.category || 'other').toLowerCase();
@@ -1656,10 +1606,10 @@ This is your personal prompt library — built to help you think, create, and mo
     })
     .map(p => ({
       ...p,
-      // Flatten tags for easier indexing
       tags_string: Array.isArray(p.tags) ? p.tags.join(' ') : (typeof p.tags === 'string' ? p.tags.replace(/,/g, ' ') : '')
     }));
 
+  let results = [];
   if (query && typeof Fuse !== 'undefined') {
     const fuse = new Fuse(searchItems, {
       keys: [
@@ -1668,12 +1618,11 @@ This is your personal prompt library — built to help you think, create, and mo
         { name: 'body', weight: 0.2 }
       ],
       includeMatches: true,
-      threshold: 0.4, // Balanced fuzziness
+      threshold: 0.4,
       useExtendedSearch: true
     });
 
     results = fuse.search(query).map(r => {
-      // Find the snippet centered around the best match in the body
       let snippet = r.item.body;
       const bodyMatch = r.matches?.find(m => m.key === 'body');
       if (bodyMatch && bodyMatch.indices.length > 0) {
@@ -1684,16 +1633,9 @@ This is your personal prompt library — built to help you think, create, and mo
       } else {
         snippet = r.item.body.substring(0, 150) + (r.item.body.length > 150 ? '…' : '');
       }
-
-      return {
-        prompt: r.item,
-        matches: r.matches,
-        score: r.score,
-        snippet
-      };
+      return { prompt: r.item, matches: r.matches, score: r.score, snippet };
     });
   } else {
-    // Default View: Sort by Favorite then Date
     results = searchItems
       .sort((a, b) => {
         if (a.favorite && !b.favorite) return -1;
@@ -1701,46 +1643,26 @@ This is your personal prompt library — built to help you think, create, and mo
         return (new Date(b.date || 0)) - (new Date(a.date || 0));
       })
       .map(p => ({
-        prompt: p,
-        matches: null,
-        snippet: p.body.substring(0, 150) + (p.body.length > 150 ? '…' : '')
+        prompt: p, matches: null, snippet: p.body.substring(0, 150) + (p.body.length > 150 ? '…' : '')
       }));
   }
 
-  if (results.length === 0) {
-    if (!query && prompts.length === 0 && !user_session) {
-      grid.innerHTML += `
-        <div style="grid-column: 1/-1; text-align: center; color: var(--text-secondary); padding: 40px;">
-          <p style="font-size: 1.2rem;">No prompts found.</p>
-          <p>Create one to get started!</p>
-        </div>
-      `;
-    }
-    return;
-  }
-
-  // Final Ranking: Favorites always at the top regardless of search score
+  // Final Ranking
   results.sort((a, b) => {
     if (a.prompt.favorite && !b.prompt.favorite) return -1;
     if (!a.prompt.favorite && b.prompt.favorite) return 1;
-    return a.score - b.score;
+    return (a.score || 0) - (b.score || 0);
   });
-
-  // Identify absolute newest prompt for the "New" badge
-  const newestId = prompts.length > 0
-    ? [...prompts].sort((a, b) => new Date(b.created_at || b.date) - new Date(a.created_at || a.date))[0].id
-    : null;
 
   resultsForResizeCheck = results.length;
 
-  // --- ROW LIMITATION LOGIC ---
+  // --- Row Limitation ---
   const container = document.getElementById('showMoreContainer');
   const btn = document.getElementById('loadMoreBtn');
   const btnText = btn?.querySelector('.btn-text');
+  let finalResults = results;
 
   if (container && btn && btnText) {
-    // Calculate items per row (columns)
-    // Grid uses minmax(300px, 1fr) with 25px gap
     const gridWidth = grid.offsetWidth;
     const cardMinWidth = 300;
     const gap = 25;
@@ -1748,107 +1670,147 @@ This is your personal prompt library — built to help you think, create, and mo
     const rowLimitCount = columns * 3;
 
     if (results.length > rowLimitCount && !isGridExpanded) {
-      // Show button and slice results
-      results = results.slice(0, rowLimitCount);
+      finalResults = results.slice(0, rowLimitCount);
       container.classList.remove('hidden');
       btn.classList.remove('expanded');
       btnText.textContent = `Show More (${resultsForResizeCheck - rowLimitCount} more)`;
     } else if (isGridExpanded && resultsForResizeCheck > rowLimitCount) {
-      // Still show button but with "Show Less" or different state
       container.classList.remove('hidden');
       btn.classList.add('expanded');
       btnText.textContent = "Show Less";
     } else {
-      // No need for button
       container.classList.add('hidden');
     }
   }
 
-  results.forEach((res, index) => {
-    const p = res.prompt;
-    const card = document.createElement('div');
-    card.className = 'prompt-card';
-    card.dataset.id = p.id;
-    card.style.animationDelay = `${index * 0.05}s`;
+  // --- RENDERING ---
+  const fragment = document.createDocumentFragment();
 
-    // Copy Button SVG
-    const copyIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
-    const favIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>`;
-    const trashIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
-    const editIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
-
-    // --- Highlighting Logic ---
-    function applyHighlights(text, key) {
-      if (!res.matches || !text) return escapeHtml(text);
-      const match = res.matches.find(m => m.key === key);
-      if (!match) return escapeHtml(text);
-
-      let result = '';
-      let lastIdx = 0;
-      match.indices.forEach(([start, end]) => {
-        result += escapeHtml(text.substring(lastIdx, start));
-        result += `<mark>${escapeHtml(text.substring(start, end + 1))}</mark>`;
-        lastIdx = end + 1;
-      });
-      result += escapeHtml(text.substring(lastIdx));
-      return result;
-    }
-
-    const titleHtml = applyHighlights(p.title || 'Untitled', 'title');
-
-    // Highlight snippet
-    let snippetHtml = escapeHtml(res.snippet);
-    if (query) {
-      const safeQ = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const re = new RegExp(`(${safeQ})`, 'gi');
-      snippetHtml = snippetHtml.replace(re, '<mark>$1</mark>');
-    }
-
-    const rawTags = Array.isArray(p.tags) ? p.tags : (typeof p.tags === 'string' ? p.tags.split(',').map(t => t.trim()) : []);
-    const displayedTags = rawTags.slice(0, 5);
-    const hiddenCount = rawTags.length - 5;
-
-    let tagsHtml = displayedTags.map(t => {
-      if (query && t.toLowerCase().includes(query.toLowerCase())) {
-        return `<span class="tag"><mark>#${escapeHtml(t)}</mark></span>`;
-      }
-      return `<span class="tag">#${escapeHtml(t)}</span>`;
-    }).join('');
-
-    if (hiddenCount > 0) tagsHtml += `<span class="tag-more">+${hiddenCount}</span>`;
-
-    const usageCount = typeof p.total_usage === 'number' ? p.total_usage : 0;
-    const usageText = usageCount > 0 ? `Used ${usageCount} ${usageCount === 1 ? 'time' : 'times'}` : '';
-
-    card.innerHTML = `
-      <div class="card-header">
-        <div class="card-title">${titleHtml} ${p.id === newestId ? '<span class="badge-new">New</span>' : ''}</div>
-        <div class="card-actions">
-
-           <button class="icon-btn fav-btn ${p.favorite ? 'active' : ''}" onclick="toggleFavorite('${p.id}')" title="Favorite">${favIcon}</button>
-           <button class="icon-btn" onclick="copyPrompt('${p.id}')" title="Copy">${copyIcon}</button>
-           <button class="icon-btn" onclick="openEditModal('${p.id}')" title="Edit">${editIcon}</button>
-           <button class="icon-btn" onclick="deletePrompt('${p.id}')" title="Delete" style="color:var(--danger-color);">${trashIcon}</button>
+  // Welcome Card
+  const isDismissed = localStorage.getItem('welcomeCardDismissed') === 'true';
+  if (!isDismissed && prompts.length === 0 && !filterText && categoryFilter === 'all' && !activeFolderId) {
+    const pinnedCard = document.createElement('div');
+    pinnedCard.className = 'prompt-card pinned-guide-card';
+    pinnedCard.innerHTML = `
+        <div class="card-header">
+            <div class="card-title">👋 Welcome to Promper Saver</div>
+            <div class="card-actions">
+                <button class="icon-btn" onclick="dismissWelcomeCard(event)" title="Dismiss Welcome Guide">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
         </div>
-      </div>
-      <div class="category-badge" style="margin-bottom:8px;">${escapeHtml(p.category) || 'other'}</div>
-      <div class="card-body">${snippetHtml}</div>
-      <div class="card-footer">
-          <div class="footer-left">
-              <div class="tags">${tagsHtml}</div>
-              <span class="age-text">${timeAgo(p.date)}</span>
+        <div class="category-badge">Getting Started</div>
+        <div class="card-body">
+            This is your personal prompt library — built to help you think, create, and move faster. 🚀<br><br>
+            • <strong>Save</strong> your best ChatGPT prompts in seconds.<br>
+            • <strong>Organize</strong> them using tags & categories.<br>
+            • <strong>Reuse</strong> and <strong>copy</strong> prompts with one click.<br><br>
+            Start by adding your first prompt above 👆
+        </div>
+        <div class="card-footer">
+            <div class="tags">
+                <span class="tag">#welcome</span>
+                <span class="tag">#guide</span>
+            </div>
+        </div>`;
+    fragment.appendChild(pinnedCard);
+  }
+
+  if (finalResults.length === 0) {
+    if (!query && prompts.length === 0 && !user_session) {
+      const emptyMsg = document.createElement('div');
+      emptyMsg.style.cssText = "grid-column: 1/-1; text-align: center; color: var(--text-secondary); padding: 40px;";
+      emptyMsg.innerHTML = `<p style="font-size: 1.2rem;">No prompts found.</p><p>Create one to get started!</p>`;
+      fragment.appendChild(emptyMsg);
+    }
+  } else {
+    const newestId = prompts.length > 0
+      ? [...prompts].sort((a, b) => new Date(b.created_at || b.date) - new Date(a.created_at || a.date))[0].id
+      : null;
+
+    finalResults.forEach((res, index) => {
+      const p = res.prompt;
+      const card = document.createElement('div');
+      card.className = 'prompt-card';
+      card.dataset.id = p.id;
+      card.style.setProperty('--card-index', index);
+
+      const copyIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+      const favIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>`;
+      const trashIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
+      const editIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
+
+      // Highlighting logic (local help function)
+      const hText = (text, key) => {
+        if (!res.matches || !text) return escapeHtml(text);
+        const match = res.matches.find(m => m.key === key);
+        if (!match) return escapeHtml(text);
+        let resH = '', lastIdx = 0;
+        match.indices.forEach(([start, end]) => {
+          resH += escapeHtml(text.substring(lastIdx, start));
+          resH += `<mark>${escapeHtml(text.substring(start, end + 1))}</mark>`;
+          lastIdx = end + 1;
+        });
+        resH += escapeHtml(text.substring(lastIdx));
+        return resH;
+      };
+
+      const titleHtml = hText(p.title || 'Untitled', 'title');
+      let snippetHtml = escapeHtml(res.snippet);
+      if (query) {
+        const safeQ = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        snippetHtml = snippetHtml.replace(new RegExp(`(${safeQ})`, 'gi'), '<mark>$1</mark>');
+      }
+
+      const rawTags = Array.isArray(p.tags) ? p.tags : (typeof p.tags === 'string' ? p.tags.split(',').map(t => t.trim()) : []);
+      const displayedTags = rawTags.slice(0, 5);
+      const hiddenCount = rawTags.length - 5;
+
+      let tagsHtml = displayedTags.map(t => {
+        if (query && t.toLowerCase().includes(query.toLowerCase())) return `<span class="tag"><mark>#${escapeHtml(t)}</mark></span>`;
+        return `<span class="tag">#${escapeHtml(t)}</span>`;
+      }).join('');
+      if (hiddenCount > 0) tagsHtml += `<span class="tag-more">+${hiddenCount}</span>`;
+
+      const usageCount = typeof p.total_usage === 'number' ? p.total_usage : 0;
+      const usageText = usageCount > 0 ? `Used ${usageCount} ${usageCount === 1 ? 'time' : 'times'}` : '';
+
+      card.innerHTML = `
+        <div class="card-header">
+          <div class="card-title">${titleHtml} ${p.id === newestId ? '<span class="badge-new">New</span>' : ''}</div>
+          <div class="card-actions">
+             <button class="icon-btn fav-btn ${p.favorite ? 'active' : ''}" onclick="toggleFavorite('${p.id}')" title="Favorite">${favIcon}</button>
+             <button class="icon-btn" onclick="copyPrompt('${p.id}')" title="Copy">${copyIcon}</button>
+             <button class="icon-btn" onclick="openEditModal('${p.id}')" title="Edit">${editIcon}</button>
+             <button class="icon-btn" onclick="deletePrompt('${p.id}')" title="Delete" style="color:var(--danger-color);">${trashIcon}</button>
           </div>
-          <div class="footer-right">
-              ${usageText ? `<div class="usage-text">${usageText}</div>` : ''}
-              <button class="icon-btn share-btn-footer" onclick="sharePrompt('${p.id}')" title="Share (Public Link)">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
-              </button>
-          </div>
-      </div>
-    `;
-    requestAnimationFrame(() => {
-      grid.appendChild(card);
+        </div>
+        <div class="category-badge" style="margin-bottom:8px;">${escapeHtml(p.category) || 'other'}</div>
+        <div class="card-body">${snippetHtml}</div>
+        <div class="card-footer">
+            <div class="footer-left">
+                <div class="tags">${tagsHtml}</div>
+                <span class="age-text">${timeAgo(p.date)}</span>
+            </div>
+            <div class="footer-right">
+                ${usageText ? `<div class="usage-text">${usageText}</div>` : ''}
+                <button class="icon-btn share-btn-footer" onclick="sharePrompt('${p.id}')" title="Share (Public Link)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+                </button>
+            </div>
+        </div>`;
+      fragment.appendChild(card);
     });
+  }
+
+  // Atomic Update to minimize CLS and layout flashes
+  requestAnimationFrame(() => {
+    grid.innerHTML = '';
+    grid.appendChild(fragment);
   });
 }
 
