@@ -685,6 +685,23 @@ body.dark-mode #modalCategoryDropdown .dropdown-options {
     color: var(--text-color);
 }
 
+.icon-btn svg {
+    pointer-events: none;
+}
+
+.icon-inline {
+    width: 18px;
+    height: 18px;
+    display: inline-block;
+    vertical-align: middle;
+    pointer-events: none;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
 .icon-btn:hover {
     background: rgba(74, 144, 226, 0.08);
     color: var(--primary-color);
@@ -774,8 +791,9 @@ body.dark-mode .paste-area textarea:focus {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
     gap: 25px;
-    min-height: 200px;
-    /* Reserve space to prevent footer jump (CLS) */
+    min-height: 50vh;
+    /* Reducues layout shift during dynamic rendering and search */
+    margin-bottom: 40px;
     content-visibility: auto;
     contain-intrinsic-size: 1px 500px;
 }
