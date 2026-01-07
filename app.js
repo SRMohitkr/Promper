@@ -2850,12 +2850,35 @@ async function checkServerOrphanedData(userId) {
       .limit(1);
 
     if (!error && orphanedPrompts && orphanedPrompts.length > 0) {
-      // If we found at least one, show the modal. 
-      // We don't need a full count for the initial prompt, 
-      // but we can fetch it if count UX is desired.
       showSyncGuestModal();
     }
   } catch (err) { }
+}
+
+function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+}
+
+function handleMagicLinkSuccess() {
+  if (isStandalone()) return;
+  if (window.location.hash.includes('access_token=') || window.location.hash.includes('type=signup') || window.location.hash.includes('type=magiclink')) {
+    const successOverlay = document.getElementById('authSuccessOverlay');
+    if (successOverlay) {
+      successOverlay.classList.remove('hidden');
+      let seconds = 5;
+      const timerSpan = document.getElementById('closeTimer');
+      if (timerSpan) timerSpan.textContent = seconds;
+      const interval = setInterval(() => {
+        seconds--;
+        if (timerSpan) timerSpan.textContent = seconds;
+        if (seconds <= 0) {
+          clearInterval(interval);
+          if (window.opener || window.history.length === 1) window.close();
+          else window.location.hash = '';
+        }
+      }, 1000);
+    }
+  }
 }
 
 /* ADD THIS: Network Status Manager */

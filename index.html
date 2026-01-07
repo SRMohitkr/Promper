@@ -708,63 +708,69 @@
                     </label>
                 </div>
 
-                <div class="form-actions" style="margin-top: 24px;">
-                    <button id="keepAsGuestBtn" class="secondary-btn">
-                        <span class="btn-text">Keep Local Only</span>
-                        <span class="loader hidden"></span>
-                    </button>
-                    <button id="syncNowBtn" class="primary-btn">
-                        <span class="btn-text">✅ Save to my account</span>
-                        <span class="loader hidden"></span>
-                    </button>
-                </div>
             </div>
         </div>
+    </div>
 
-        <!-- SVG Sprite Sheet for Performance -->
-        <svg style="display: none;">
-            <symbol id="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-            </symbol>
-            <symbol id="icon-fav" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round">
-                <polygon
-                    points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2">
-                </polygon>
-            </symbol>
-            <symbol id="icon-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="3 6 5 6 21 6"></polyline>
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-            </symbol>
-            <symbol id="icon-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-            </symbol>
-            <symbol id="icon-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="18" cy="5" r="3"></circle>
-                <circle cx="6" cy="12" r="3"></circle>
-                <circle cx="18" cy="19" r="3"></circle>
-                <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-                <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
-            </symbol>
-        </svg>
+    <!-- Auth Success Splash (For Magic Link Tabs) -->
+    <div id="authSuccessOverlay" class="modal-overlay hidden">
+        <div class="modal glass-panel confirm-modal">
+            <div class="auth-icon-success" style="font-size: 3.5rem; margin-bottom: 20px;">✨</div>
+            <h2>Login Successful!</h2>
+            <p class="modal-subtitle">Your other tabs have been updated. You can close this tab or return to the
+                dashboard.</p>
+            <div class="form-actions" style="margin-top: 24px; flex-direction: column; gap: 12px;">
+                <button onclick="window.location.href=window.location.origin" class="primary-btn full-width">Go to
+                    Dashboard</button>
+                <p style="font-size: 0.85rem; opacity: 0.7;">Closing in <span id="closeTimer">5</span>s...</p>
+            </div>
+        </div>
+    </div>
 
-        <!-- Vercel Speed Insights -->
-        <script>
-            window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
-            // Only load in production to avoid local 404 errors
-            if (window.location.hostname !== '127.0.0.1' && window.location.hostname !== 'localhost') {
-                var script = document.createElement('script');
-                script.src = '/_vercel/speed-insights/script.js';
-                script.defer = true;
-                document.body.appendChild(script);
-            }
-        </script>
+    <!-- SVG Sprite Sheet for Performance -->
+    <svg style="display: none;">
+        <symbol id="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </symbol>
+        <symbol id="icon-fav" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polygon
+                points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2">
+            </polygon>
+        </symbol>
+        <symbol id="icon-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        </symbol>
+        <symbol id="icon-edit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+        </symbol>
+        <symbol id="icon-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="18" cy="5" r="3"></circle>
+            <circle cx="6" cy="12" r="3"></circle>
+            <circle cx="18" cy="19" r="3"></circle>
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+        </symbol>
+    </svg>
+
+    <!-- Vercel Speed Insights -->
+    <script>
+        window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+        // Only load in production to avoid local 404 errors
+        if (window.location.hostname !== '127.0.0.1' && window.location.hostname !== 'localhost') {
+            var script = document.createElement('script');
+            script.src = '/_vercel/speed-insights/script.js';
+            script.defer = true;
+            document.body.appendChild(script);
+        }
+    </script>
 </body>
 
 </html>
