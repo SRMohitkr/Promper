@@ -245,10 +245,15 @@ const userInfoOption = document.getElementById('userInfoOption');
 const userEmailDisplay = document.getElementById('userEmailDisplay');
 const loginOption = document.getElementById('loginOption');
 
-const bookmarkletOption = document.getElementById('bookmarkletOption');
-const bookmarkletModalOverlay = document.getElementById('bookmarkletModalOverlay');
 const bookmarkletLink = document.getElementById('bookmarkletLink');
 const closeBookmarkletModal = document.getElementById('closeBookmarkletModal');
+
+// Guest Sync Choice DOM
+const syncGuestOverlay = document.getElementById('syncGuestOverlay');
+const closeSyncGuest = document.getElementById('closeSyncGuest');
+const keepAsGuestBtn = document.getElementById('keepAsGuestBtn');
+const syncNowBtn = document.getElementById('syncNowBtn');
+const dontAskSync = document.getElementById('dontAskSync');
 
 let currentFilter = 'all';
 
@@ -326,7 +331,19 @@ async function initApp() {
 
           } catch (e) { console.warn("Profile sync failed", e); }
 
-          await migratePromptsToUser(session.user.id);
+          // Refined Migration Trigger
+          const hasMigrated = localStorage.getItem('guest_migrated') === 'true';
+          const hasSkipped = localStorage.getItem('skip_guest_migration') === 'true';
+
+          if (!hasMigrated && !hasSkipped) {
+            const localGuestData = prompts.filter(p => p.is_guest_data || !p.user_id);
+            if (localGuestData.length > 0) {
+              showSyncGuestModal(localGuestData.length);
+            } else {
+              checkServerOrphanedData(session.user.id);
+            }
+          }
+
           await syncData();
           hideAuthOverlay();
         } else if (event === 'SIGNED_OUT') {
@@ -390,18 +407,55 @@ function setupAuthListeners() {
       }
     });
 
-    setLoading(sendOtpBtn, false);
+    // Clear any existing cooldown if successful (though unlikely to reach here if blocked)
+    if (!error) {
+      if (window.otpCooldownInterval) clearInterval(window.otpCooldownInterval);
+      sendOtpBtn.disabled = false;
+      const btnText = sendOtpBtn.querySelector('.btn-text');
+      if (btnText) btnText.textContent = 'Send Code';
 
-    if (error) {
-      console.error("Auth Error:", error);
-      alert('Error sending magic link: ' + error.message);
-    } else {
       authEmailForm.classList.add('hidden');
       authOtpForm.classList.add('hidden'); // Ensure OTP form is hidden
       document.getElementById('sentEmailAddress').textContent = email;
       document.getElementById('authCheckEmail').classList.remove('hidden'); // Show "Check for Link" message
+    } else {
+      console.error("Auth Error:", error);
+
+      // Handle Rate Limit (Error 429)
+      if (error.status === 429 || error.message.toLowerCase().includes('security purposes') || error.message.toLowerCase().includes('too many requests')) {
+        let seconds = 60; // Default
+        const match = error.message.match(/(\d+)\s*seconds/);
+        if (match) seconds = parseInt(match[1]);
+
+        showToast(`Security cooldown: Please wait ${seconds}s`);
+        startOtpCooldown(seconds);
+      } else {
+        alert('Error sending magic link: ' + error.message);
+      }
     }
   });
+
+  function startOtpCooldown(seconds) {
+    if (window.otpCooldownInterval) clearInterval(window.otpCooldownInterval);
+
+    let remaining = seconds;
+    const btnText = sendOtpBtn.querySelector('.btn-text');
+    const originalText = 'Send Code';
+
+    sendOtpBtn.disabled = true;
+    if (btnText) btnText.textContent = `Wait ${remaining}s`;
+
+    window.otpCooldownInterval = setInterval(() => {
+      remaining--;
+      if (remaining <= 0) {
+        clearInterval(window.otpCooldownInterval);
+        sendOtpBtn.disabled = false;
+        if (btnText) btnText.textContent = originalText;
+      } else {
+        if (btnText) btnText.textContent = `Wait ${remaining}s`;
+      }
+    }, 1000);
+  }
 
   // ADD THIS: Close button handler
   const closeAuthBtn = document.getElementById('closeAuthBtn');
@@ -541,47 +595,48 @@ function setLoading(btnElement, isLoading) {
 
 // ---------- Migration Logic ----------
 async function migratePromptsToUser(userId) {
-  if (!supabaseClient || !userId) return;
+  if (!supabaseClient || !userId) return false;
 
-
-  // 1. Flush any pending guest data currently in the local sync queue
-  // This ensures we're migrating the most up-to-date local state
-  await syncService.migrateGuestData();
-
-  // 2. Fetch server-side orphaned data for this device
-  // (Data that was saved while guest on this device but never synced/merged)
   try {
-    const { data: orphanedPrompts, error } = await supabaseClient
+    // 1. Mark migration flags immediately to prevent re-triggering
+    localStorage.setItem('guest_migrated', 'true');
+
+    // 2. Process local prompts (Fast)
+    const guestItems = prompts.filter(p => p.is_guest_data || !p.user_id);
+    if (guestItems.length > 0) {
+      guestItems.forEach(item => {
+        if (!syncQueue.find(q => q.local_id === item.id)) {
+          item.user_id = userId;
+          item.is_guest_data = false;
+          syncService.enqueue({ type: 'create', local_id: item.id, payload: item });
+        }
+      });
+      syncService.process();
+    }
+
+    // 3. Perform high-performance bulk update for server-side orphaned data
+    // This is much faster than fetching and re-enqueuing one-by-one
+    const { error: cloudError } = await supabaseClient
       .from('prompt_saves')
-      .select('*')
+      .update({
+        user_id: userId,
+        is_guest_data: false,
+        updated_at: new Date().toISOString()
+      })
       .eq('device_id', device_id)
       .is('user_id', null);
 
-    if (error) throw error;
-
-    if (orphanedPrompts && orphanedPrompts.length > 0) {
-
-      for (const p of orphanedPrompts) {
-        // Enqueue as an update to assign the user_id. 
-        // client_mutation_id (op.local_id) handles deduplication on the server.
-        syncService.enqueue({
-          type: 'update',
-          local_id: p.client_mutation_id || p.id,
-          payload: {
-            ...p,
-            user_id: userId,
-            is_guest_data: false
-          }
-        });
-      }
-      showToast(`Merged ${orphanedPrompts.length} guest prompts!`);
+    if (cloudError) {
+      console.warn("Cloud-side migration missed some items:", cloudError);
     }
-  } catch (err) {
-    console.warn("Identity System: Server-side migration failed (Retrying later)", err);
-  }
 
-  // 3. Mark migration as complete locally to avoid redundant checks
-  localStorage.setItem('promper_saver_migration_complete', 'true');
+    showToast('✅ Prompts saved to your account');
+    return true;
+  } catch (err) {
+    console.error("Migration fatal error:", err);
+    showToast('⚠ Migration encountered an issue. Please try again.');
+    return false;
+  }
 }
 
 
@@ -818,6 +873,66 @@ function setupEventListeners() {
     previewModalOverlay.addEventListener('click', (e) => {
       if (e.target === previewModalOverlay) previewModalOverlay.classList.add('hidden');
     });
+  }
+
+  // Logout Confirmation
+  const logoutConfirmOverlay = document.getElementById('logoutConfirmOverlay');
+  const closeLogoutConfirm = document.getElementById('closeLogoutConfirm');
+  const cancelLogoutBtn = document.getElementById('cancelLogoutBtn');
+  const confirmLogoutBtn = document.getElementById('confirmLogoutBtn');
+
+  if (closeLogoutConfirm) closeLogoutConfirm.onclick = hideLogoutConfirmModal;
+  if (cancelLogoutBtn) cancelLogoutBtn.onclick = hideLogoutConfirmModal;
+  if (confirmLogoutBtn) {
+    confirmLogoutBtn.onclick = () => {
+      hideLogoutConfirmModal();
+      handleLogout();
+    };
+  }
+  if (logoutConfirmOverlay) {
+    logoutConfirmOverlay.onclick = (e) => {
+      if (e.target === logoutConfirmOverlay) hideLogoutConfirmModal();
+    };
+  }
+
+  // Guest Sync Choice
+  if (closeSyncGuest) {
+    closeSyncGuest.onclick = () => {
+      if (dontAskSync?.checked) {
+        localStorage.setItem('skip_guest_migration', 'true');
+      }
+      hideSyncGuestModal();
+    };
+  }
+  if (keepAsGuestBtn) {
+    keepAsGuestBtn.onclick = () => {
+      if (dontAskSync?.checked) {
+        localStorage.setItem('skip_guest_migration', 'true');
+      }
+      hideSyncGuestModal();
+    };
+  }
+  if (syncNowBtn) {
+    syncNowBtn.onclick = async () => {
+      if (user_session) {
+        setLoading(syncNowBtn, true);
+        const success = await migratePromptsToUser(user_session.user.id);
+        setLoading(syncNowBtn, false);
+        if (success) {
+          hideSyncGuestModal();
+        }
+      }
+    };
+  }
+  if (syncGuestOverlay) {
+    syncGuestOverlay.onclick = (e) => {
+      if (e.target === syncGuestOverlay) {
+        if (dontAskSync?.checked) {
+          localStorage.setItem('skip_guest_migration', 'true');
+        }
+        hideSyncGuestModal();
+      }
+    };
   }
 }
 
@@ -2606,7 +2721,7 @@ function renderUserProfile(user) {
   if (logoutBtn) {
     logoutBtn.onclick = (e) => {
       e.stopPropagation();
-      handleLogout();
+      showLogoutConfirmModal();
     };
   }
 
@@ -2647,12 +2762,85 @@ async function handleLogout() {
   // Revert prompts
   renderPrompts();
 
-  // 2. Perform Supabase SignOut
-  // Even if this fails or event doesn't fire, UI is already clean.
-  const { error } = await supabaseClient.auth.signOut();
-  if (error) {
-    console.error('Logout error:', error);
+  // 2. Explicitly clear local storage keys for this project
+  // This prevents the session from being restored before the async signOut completes
+  Object.keys(localStorage).forEach(key => {
+    if (key.includes('sb-') || key.includes('supabase.auth.')) {
+      localStorage.removeItem(key);
+    }
+  });
+
+  // 3. Perform Supabase SignOut
+  try {
+    if (supabaseClient) {
+      await supabaseClient.auth.signOut();
+    }
+  } catch (err) {
+    console.error('Logout error:', err);
   }
+
+  // 4. Force a clean URL redirect to prevent fragment auto-authenticating
+  // Only redirect if there is an identity fragment (hash) present
+  if (window.location.hash) {
+    window.location.href = window.location.origin + window.location.pathname;
+  }
+}
+
+function showLogoutConfirmModal() {
+  const overlay = document.getElementById('logoutConfirmOverlay');
+  if (overlay) {
+    overlay.classList.remove('hidden');
+    // Hide the profile dropdown if open
+    document.querySelectorAll('.profile-dropdown-menu').forEach(m => m.classList.remove('show'));
+  }
+}
+
+function hideLogoutConfirmModal() {
+  const overlay = document.getElementById('logoutConfirmOverlay');
+  if (overlay) {
+    overlay.classList.add('hidden');
+  }
+}
+
+function showSyncGuestModal(count = 0) {
+  if (syncGuestOverlay) {
+    if (count > 0) {
+      const subtitle = document.getElementById('syncGuestSubtitle');
+      if (subtitle) {
+        subtitle.textContent = `You have ${count} prompts saved while using guest mode. Would you like to save them to your account so they're available on all your devices?`;
+      }
+    }
+    syncGuestOverlay.classList.remove('hidden');
+  }
+}
+
+function hideSyncGuestModal() {
+  if (syncGuestOverlay) {
+    syncGuestOverlay.classList.add('hidden');
+  }
+}
+
+async function checkServerOrphanedData(userId) {
+  if (!supabaseClient || !userId) return;
+  // Check if flags already set
+  if (localStorage.getItem('guest_migrated') === 'true' || localStorage.getItem('skip_guest_migration') === 'true') return;
+
+  try {
+    // Use select('id').limit(1) for faster existence check
+    const { data: orphanedPrompts, error } = await supabaseClient
+      .from('prompt_saves')
+      .select('id')
+      .eq('device_id', device_id)
+      .is('user_id', null)
+      .limit(1);
+
+    if (!error && orphanedPrompts && orphanedPrompts.length > 0) {
+      // If we found at least one, show the modal. 
+      // We don't need a full count for the initial prompt, 
+      // but we can fetch it if count UX is desired.
+      showSyncGuestModal();
+    }
+  } catch (err) { }
 }
 
 /* ADD THIS: Network Status Manager */

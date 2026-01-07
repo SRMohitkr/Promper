@@ -675,6 +675,52 @@
 
 
 
+        <!-- Logout Confirmation Modal -->
+        <div id="logoutConfirmOverlay" class="modal-overlay hidden">
+            <div class="modal glass-panel confirm-modal">
+                <div class="modal-header">
+                    <h2>Log Out?</h2>
+                    <button id="closeLogoutConfirm" class="close-btn">&times;</button>
+                </div>
+                <p class="modal-subtitle">Are you sure you want to log out? You'll need to sign in again to sync your
+                    prompts.</p>
+                <div class="form-actions" style="margin-top: 24px;">
+                    <button id="cancelLogoutBtn" class="secondary-btn">Cancel</button>
+                    <button id="confirmLogoutBtn" class="primary-btn danger-btn">Log Out</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Guest Sync Choice Modal -->
+        <div id="syncGuestOverlay" class="modal-overlay hidden">
+            <div class="modal glass-panel confirm-modal">
+                <div class="modal-header">
+                    <h2>Save your guest prompts?</h2>
+                    <button id="closeSyncGuest" class="close-btn">&times;</button>
+                </div>
+                <p id="syncGuestSubtitle" class="modal-subtitle">You have prompts saved while using guest mode. Would
+                    you like to save them to your account so they're available on all your devices?</p>
+
+                <div class="modal-body-pushed">
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="dontAskSync">
+                        <span class="checkbox-text">Don't ask again</span>
+                    </label>
+                </div>
+
+                <div class="form-actions" style="margin-top: 24px;">
+                    <button id="keepAsGuestBtn" class="secondary-btn">
+                        <span class="btn-text">Keep Local Only</span>
+                        <span class="loader hidden"></span>
+                    </button>
+                    <button id="syncNowBtn" class="primary-btn">
+                        <span class="btn-text">✅ Save to my account</span>
+                        <span class="loader hidden"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Vercel Speed Insights -->
         <script>
             window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };

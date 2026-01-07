@@ -3285,3 +3285,45 @@ body.dark-mode .theme-switch-btn.active {
         display: none !important;
     }
 }
+
+/* Confirmation Modal */
+.confirm-modal {
+    max-width: 400px;
+    text-align: center;
+}
+
+.modal-body-pushed {
+    margin-top: 20px;
+    display: flex;
+    justify-content: center;
+}
+
+.checkbox-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+}
+
+.checkbox-container:hover {
+    opacity: 1;
+}
+
+.checkbox-container input {
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+}
+
+.danger-btn {
+    background: linear-gradient(135deg, #ff6b6b, #ee5253) !important;
+    box-shadow: 0 4px 15px rgba(238, 82, 83, 0.3) !important;
+}
+
+.danger-btn:hover {
+    background: linear-gradient(135deg, #ee5253, #d63031) !important;
+    transform: translateY(-2px);
+}
