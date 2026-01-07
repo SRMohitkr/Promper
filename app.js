@@ -18,14 +18,6 @@ if (!device_id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
   localStorage.setItem('device_id', device_id);
 }
 
-// Cross-tab Auth Signaling
-const authChannel = new BroadcastChannel('promper_auth');
-authChannel.onmessage = (event) => {
-  if (event.data === 'LOGIN_SUCCESS') {
-    window.location.reload(); // Refresh to catch new session
-  }
-};
-
 // Categories
 const DEFAULT_CATEGORIES = ['coding', 'writing', 'art', 'other'];
 let categories = [];
@@ -326,12 +318,6 @@ async function initApp() {
             if (banner) banner.classList.remove('hidden');
             sessionStorage.setItem('welcomeBannerShown', 'true');
           }
-
-          // Broadcast to other tabs
-          authChannel.postMessage('LOGIN_SUCCESS');
-
-          // Handle Magic Link Success UI (Close Tab Flow)
-          handleMagicLinkSuccess();
 
           // Ensure profile exists in DB
           try {
@@ -1868,11 +1854,10 @@ function renderPrompts(filterText = '', categoryFilter = 'all') {
       card.dataset.id = p.id;
       card.style.setProperty('--card-index', index);
 
-      const copyIcon = `<svg class="icon-inline"><use href="#icon-copy"></use></svg>`;
-      const favIcon = `<svg class="icon-inline"><use href="#icon-fav"></use></svg>`;
-      const trashIcon = `<svg class="icon-inline" style="color:var(--danger-color);"><use href="#icon-trash"></use></svg>`;
-      const editIcon = `<svg class="icon-inline"><use href="#icon-edit"></use></svg>`;
-      const shareIcon = `<svg class="icon-inline" width="14" height="14"><use href="#icon-share"></use></svg>`;
+      const copyIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+      const favIcon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>`;
+      const trashIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
+      const editIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
 
       // Highlighting logic (local help function)
       const hText = (text, key) => {
@@ -1922,16 +1907,16 @@ function renderPrompts(filterText = '', categoryFilter = 'all') {
         <div class="category-badge" style="margin-bottom:8px;">${escapeHtml(p.category) || 'other'}</div>
         <div class="card-body">${snippetHtml}</div>
         <div class="card-footer">
-        <div class="footer-left">
-            <div class="tags">${tagsHtml}</div>
-            <span class="age-text">${timeAgo(p.date)}</span>
-        </div>
-        <div class="footer-right">
-            ${usageText ? `<div class="usage-text">${usageText}</div>` : ''}
-            <button class="icon-btn share-btn-footer" onclick="sharePrompt('${p.id}')" title="Share (Public Link)">
-                ${shareIcon}
-            </button>
-        </div>
+            <div class="footer-left">
+                <div class="tags">${tagsHtml}</div>
+                <span class="age-text">${timeAgo(p.date)}</span>
+            </div>
+            <div class="footer-right">
+                ${usageText ? `<div class="usage-text">${usageText}</div>` : ''}
+                <button class="icon-btn share-btn-footer" onclick="sharePrompt('${p.id}')" title="Share (Public Link)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+                </button>
+            </div>
         </div>`;
       fragment.appendChild(card);
     });
@@ -2850,35 +2835,12 @@ async function checkServerOrphanedData(userId) {
       .limit(1);
 
     if (!error && orphanedPrompts && orphanedPrompts.length > 0) {
+      // If we found at least one, show the modal. 
+      // We don't need a full count for the initial prompt, 
+      // but we can fetch it if count UX is desired.
       showSyncGuestModal();
     }
   } catch (err) { }
-}
-
-function isStandalone() {
-  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-}
-
-function handleMagicLinkSuccess() {
-  if (isStandalone()) return;
-  if (window.location.hash.includes('access_token=') || window.location.hash.includes('type=signup') || window.location.hash.includes('type=magiclink')) {
-    const successOverlay = document.getElementById('authSuccessOverlay');
-    if (successOverlay) {
-      successOverlay.classList.remove('hidden');
-      let seconds = 5;
-      const timerSpan = document.getElementById('closeTimer');
-      if (timerSpan) timerSpan.textContent = seconds;
-      const interval = setInterval(() => {
-        seconds--;
-        if (timerSpan) timerSpan.textContent = seconds;
-        if (seconds <= 0) {
-          clearInterval(interval);
-          if (window.opener || window.history.length === 1) window.close();
-          else window.location.hash = '';
-        }
-      }, 1000);
-    }
-  }
 }
 
 /* ADD THIS: Network Status Manager */
