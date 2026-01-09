@@ -125,22 +125,27 @@ class SyncService {
   async executeOp(op) {
     try {
       if (op.type === 'create' || op.type === 'update') {
+        const upsertData = {
+          user_id: user_session?.user?.id || op.payload.user_id,
+          device_id: device_id,
+          title: op.payload.title,
+          body: op.payload.body,
+          tags: Array.isArray(op.payload.tags) ? op.payload.tags.join(',') : op.payload.tags,
+          category: op.payload.category,
+          favorite: op.payload.favorite,
+          folder_id: op.payload.folder_id,
+          total_usage: op.payload.total_usage || 0,
+          deleted: op.payload.deleted ?? false,
+          client_mutation_id: op.local_id,
+          updated_at: new Date(op.payload.updated_at || Date.now()).toISOString()
+        };
+
+        if (op.payload.cloud_id) upsertData.id = op.payload.cloud_id;
+
         const { data, error } = await supabaseClient
           .from('prompt_saves')
-          .upsert({
-            user_id: user_session?.user?.id || op.payload.user_id,
-            device_id: device_id,
-            title: op.payload.title,
-            body: op.payload.body,
-            tags: Array.isArray(op.payload.tags) ? op.payload.tags.join(',') : op.payload.tags,
-            category: op.payload.category,
-            favorite: op.payload.favorite,
-            folder_id: op.payload.folder_id,
-            total_usage: op.payload.total_usage || 0,
-            client_mutation_id: op.local_id,
-            updated_at: new Date(op.payload.updated_at || Date.now()).toISOString()
-          }, {
-            onConflict: 'client_mutation_id'
+          .upsert(upsertData, {
+            onConflict: op.payload.cloud_id ? 'id' : 'client_mutation_id'
           })
           .select()
           .single();
@@ -276,6 +281,10 @@ async function initApp() {
         p.is_guest_data = !p.cloud_id;
         p.status = p.cloud_id ? 'synced' : 'local-only';
         p.user_id = p.user_id || null;
+        if (p.deleted === undefined) p.deleted = false;
+        needsSave = true;
+      } else if (p.deleted === undefined) {
+        p.deleted = false;
         needsSave = true;
       }
     });
@@ -1202,7 +1211,8 @@ async function handleFormSubmit(e) {
     // Implicit status & guest tracking
     user_id: user_session ? user_session.user.id : null,
     status: user_session ? 'syncing' : 'local-only',
-    is_guest_data: !user_session
+    is_guest_data: !user_session,
+    deleted: existingPrompt ? (existingPrompt.deleted ?? false) : false
   };
 
 
@@ -1256,7 +1266,8 @@ function handleQuickAdd() {
     // Implicit status
     user_id: user_session ? user_session.user.id : null,
     status: user_session ? 'syncing' : 'local-only',
-    is_guest_data: !user_session
+    is_guest_data: !user_session,
+    deleted: false
   };
 
   prompts.unshift(newPrompt);
@@ -1277,17 +1288,39 @@ async function deletePrompt(id) {
   const prompt = prompts.find(p => String(p.id) === String(id));
   if (!prompt) return;
 
-  // 1. Remove Locally IMMEDIATELY
-  prompts = prompts.filter(p => String(p.id) !== String(id));
+  // 1. Optimistic UI: Mark as deleted and hide from current view
+  prompt.deleted = true;
+  prompt.updated_at = new Date().toISOString();
   saveToLocalStorage();
   renderPrompts(searchInput?.value, currentFilter);
-  showToast('Removed');
 
-  // 2. Handle Cloud Sync
+  // 2. Add to Sync Queue
   if (user_session) {
-    syncService.enqueue({ type: 'delete', local_id: id });
+    syncService.enqueue({ type: 'update', local_id: id, payload: prompt });
   }
+
+  // 3. Show Undo Toast (8 seconds)
+  showToast('Prompt deleted', 8000, () => undoDelete(id));
 }
+
+async function undoDelete(id) {
+  const prompt = prompts.find(p => String(p.id) === String(id));
+  if (!prompt) return;
+
+  // 1. Revert locally
+  prompt.deleted = false;
+  prompt.updated_at = new Date().toISOString();
+  saveToLocalStorage();
+  renderPrompts(searchInput?.value, currentFilter);
+  showToast('Restored');
+
+  // 2. Update Sync Queue or Enqueue Restore
+  if (user_session) {
+    // If it's still in the local queue as 'update' with deleted=true, 
+    // we could try to remove it, but enqueueing another update is safer for consistency.
+    syncService.enqueue({ type: 'update', local_id: id, payload: prompt });
+  }
+} window.undoDelete = undoDelete;
 
 function queueOfflineDelete(cloudId) {
   if (!offlineDeletes.includes(cloudId)) {
@@ -1319,7 +1352,7 @@ async function loadPromptsFromSupabaseAndMerge() {
   if (!supabaseClient) return;
 
   try {
-    let query = supabaseClient.from("prompt_saves").select("*").order("created_at", { ascending: false });
+    let query = supabaseClient.from("prompt_saves").select("*").eq('deleted', false).order("created_at", { ascending: false });
 
     // TASK 2: Show Only User’s Supabase Prompts
     if (user_session) {
@@ -1343,7 +1376,7 @@ async function loadPromptsFromSupabaseAndMerge() {
     const cloudMap = new Map();
     data.forEach(row => {
       cloudMap.set(row.id, {
-        id: row.id,
+        id: row.client_mutation_id || row.id,
         cloud_id: row.id,
         title: row.title,
         body: row.body,
@@ -1356,6 +1389,7 @@ async function loadPromptsFromSupabaseAndMerge() {
         user_id: row.user_id,
         folder_id: row.folder_id,
         total_usage: row.total_usage || 0,
+        client_mutation_id: row.client_mutation_id,
         storage: 'cloud'
       });
     });
@@ -1717,7 +1751,7 @@ function renderPrompts(filterText = '', categoryFilter = 'all') {
       const fCat = categoryFilter.toLowerCase();
       const categoryMatch = (fCat === 'all' || pCat === fCat);
       const folderMatch = (!activeFolderId || String(p.folder_id) === String(activeFolderId));
-      return categoryMatch && folderMatch;
+      return categoryMatch && folderMatch && p.deleted !== true;
     })
     .map(p => ({
       ...p,
@@ -2406,15 +2440,37 @@ function closeModal() {
   setTimeout(() => modalOverlay.classList.add('hidden'), 300);
 }
 
-function showToast(msg) {
+function showToast(msg, duration = 2500, undoAction = null) {
   const t = document.getElementById('toast');
-  document.getElementById('toastMessage').textContent = msg;
+  const msgEl = document.getElementById('toastMessage');
+  const undoBtn = document.getElementById('toastUndo');
+
+  msgEl.textContent = msg;
+
+  if (undoAction && undoBtn) {
+    undoBtn.classList.remove('hidden');
+    undoBtn.onclick = (e) => {
+      e.stopPropagation();
+      undoAction();
+      // Hide early
+      t.classList.remove('visible');
+      setTimeout(() => t.classList.add('hidden'), 300);
+    };
+  } else if (undoBtn) {
+    undoBtn.classList.add('hidden');
+  }
+
   t.classList.remove('hidden');
   setTimeout(() => t.classList.add('visible'), 10);
-  setTimeout(() => {
+
+  // Clear previous timeout if any? (Simple version: just let them overlap or replace)
+  if (window._toastTimeout) clearTimeout(window._toastTimeout);
+
+  window._toastTimeout = setTimeout(() => {
     t.classList.remove('visible');
     setTimeout(() => t.classList.add('hidden'), 300);
-  }, 2500);
+    window._toastTimeout = null;
+  }, duration);
 }
 
 // Global scope expose for onclick handlers
