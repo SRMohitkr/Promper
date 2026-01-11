@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-0ZMTW8WC23"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+
+        gtag('config', 'G-0ZMTW8WC23');
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Promper Saver Capture</title>
+    <link rel="icon" type="image/png" href="logo.png">
+    <!-- Vercel Web Analytics -->
+    <script>
+        window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+        if (window.location.hostname !== '127.0.0.1' && window.location.hostname !== 'localhost') {
+            var script = document.createElement('script');
+            script.src = '/_vercel/insights/script.js';
+            script.defer = true;
+            document.head.appendChild(script);
+        }
+    </script>
+    <style>
+        :root {
+            --primary-color: #4a90e2;
+            --primary-gradient: linear-gradient(135deg, #4a90e2 0%, #a29bfe 100%);
+            --bg-glass: #ffffff;
+            --border: rgba(0, 0, 0, 0.1);
+            --text: #333;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --primary-color: #6ba3ff;
+                --primary-gradient: linear-gradient(135deg, #6ba3ff 0%, #a29bfe 100%);
+                --bg-glass: #171717;
+                --border: rgba(255, 255, 255, 0.1);
+                --text: #ececec;
+            }
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg-glass);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            color: var(--text);
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .header .logo-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header img {
+            height: 32px;
+            width: auto;
+        }
+
+        .header .brand-text {
+            font-size: 0.95rem;
+            font-weight: 800;
+            background: var(--primary-gradient);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.3px;
+        }
+
+        textarea {
+            flex: 1;
+            width: 100%;
+            background: rgba(0, 0, 0, 0.05);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px;
+            font-family: inherit;
+            font-size: 1rem;
+            color: inherit;
+            resize: none;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        textarea:focus {
+            border-color: var(--primary-color);
+        }
+
+        .footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 15px;
+        }
+
+        .hints {
+            font-size: 0.75rem;
+            opacity: 0.5;
+        }
+
+        .btn-save {
+            background: var(--primary-gradient);
+            color: white;
+            border: none;
+            padding: 10px 28px;
+            border-radius: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(74, 144, 226, 0.2);
+        }
+
+        .btn-save:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 15px rgba(74, 144, 226, 0.3);
+        }
+
+        .btn-save:active {
+            transform: scale(0.97);
+        }
+
+        .btn-save:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .status {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-glass);
+            font-weight: 700;
+            font-size: 1.2rem;
+            visibility: hidden;
+            opacity: 0;
+            transition: all 0.2s;
+        }
+
+        .status.show {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        .status svg {
+            margin-right: 8px;
+            color: #2ecc71;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <div class="logo-group">
+            <img src="logo.png" alt="Logo">
+            <span class="brand-text">Promper Saver</span>
+        </div>
+        <span id="closeBtn" style="cursor:pointer; font-size: 0.8rem; opacity: 0.6; font-weight: 600;">CLOSE</span>
+    </div>
+    <textarea id="promptBody" placeholder="Captured thought..."></textarea>
+    <div class="footer">
+        <div class="hints">⌘ + Enter to save</div>
+        <button id="saveBtn" class="btn-save">Save</button>
+    </div>
+    <div id="statusOverlay" class="status">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        Captured
+    </div>
+
+    <script src="./cloudConfig.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        // Inlined bridge logic
+        const SUPABASE_URL = window.SUPABASE_URL;
+        const SUPABASE_KEY = window.SUPABASE_ANON_KEY;
+        let supabaseClient = null;
+
+        const promptBody = document.getElementById('promptBody');
+        const saveBtn = document.getElementById('saveBtn');
+        const statusOverlay = document.getElementById('statusOverlay');
+
+        // 1. Initial Data
+        const urlParams = new URLSearchParams(window.location.search);
+        promptBody.value = urlParams.get('text') || '';
+        promptBody.focus();
+
+        // 2. Client Init
+        if (SUPABASE_URL && SUPABASE_KEY) {
+            supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+                auth: {
+                    flowType: 'pkce',
+                    detectSessionInUrl: true,
+                    persistSession: true,
+                    autoRefreshToken: true
+                }
+            });
+        }
+
+        function analyzePrompt(text) {
+            const lines = text.trim().split('\n');
+            const firstLine = lines[0] || '';
+            const title = firstLine.substring(0, 40) + (firstLine.length > 40 ? '...' : '');
+            const lower = text.toLowerCase();
+            let category = 'other';
+            if (lower.includes('function') || lower.includes('const') || lower.includes('return')) category = 'coding';
+            else if (lower.includes('essay') || lower.includes('blog') || lower.includes('write')) category = 'writing';
+            else if (lower.includes('style') || lower.includes('render') || lower.includes('image')) category = 'art';
+            return { title, category };
+        }
+
+        async function save() {
+            const text = promptBody.value.trim();
+            if (!text) return;
+            saveBtn.disabled = true;
+            const analysis = analyzePrompt(text);
+            const device_id = localStorage.getItem('device_id') || 'bookmarklet-guest';
+            let user_id = null;
+            try {
+                const sessionKey = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'));
+                if (sessionKey) {
+                    const session = JSON.parse(localStorage.getItem(sessionKey));
+                    user_id = session.user?.id;
+                }
+            } catch (e) { }
+
+            const payload = {
+                id: crypto.randomUUID(),
+                title: analysis.title,
+                body: text,
+                category: analysis.category,
+                device_id: device_id,
+                user_id: user_id,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                tags: 'captured'
+            };
+
+            // Local Sync
+            try {
+                const prompts = JSON.parse(localStorage.getItem('prompts') || '[]');
+                prompts.unshift(payload);
+                localStorage.setItem('prompts', JSON.stringify(prompts));
+                const queue = JSON.parse(localStorage.getItem('syncQueue') || '[]');
+                queue.push({ type: 'create', local_id: payload.id, payload, timestamp: Date.now() });
+                localStorage.setItem('syncQueue', JSON.stringify(queue));
+            } catch (e) { }
+
+            // Background Cloud Save
+            if (supabaseClient) {
+                supabaseClient.from('prompt_saves').insert([payload]).then(() => { }).catch(() => { });
+            }
+
+            statusOverlay.classList.add('show');
+            setTimeout(() => window.close(), 500);
+        }
+
+        saveBtn.onclick = save;
+        document.getElementById('closeBtn').onclick = () => window.close();
+        window.onkeydown = (e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') save();
+            if (e.key === 'Escape') window.close();
+        };
+    </script>
+    <!-- Vercel Speed Insights -->
+    <script>
+        window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+        if (window.location.hostname !== '127.0.0.1' && window.location.hostname !== 'localhost') {
+            var script = document.createElement('script');
+            script.src = '/_vercel/speed-insights/script.js';
+            script.defer = true;
+            document.body.appendChild(script);
+        }
+    </script>
+</body>
+
+</html>
