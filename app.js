@@ -307,6 +307,14 @@ async function initApp() {
       if (error) console.error("Session fetch error:", error);
       user_session = session;
 
+      // Handle explicit auth trigger from URL
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('auth') === 'login' && !user_session) {
+        showAuthOverlay();
+        // Clean URL to avoid re-triggering on refresh
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+
       if (session) {
         updateAuthUI();
         renderUserProfile(session.user);
@@ -412,7 +420,9 @@ function setupAuthListeners() {
       email,
       options: {
         shouldCreateUser: true,
-        emailRedirectTo: window.location.origin
+        emailRedirectTo: window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1')
+          ? window.location.origin + '/app.html'
+          : window.location.origin + '/app.html'
       }
     });
 
@@ -943,6 +953,34 @@ function setupEventListeners() {
       }
     };
   }
+
+  // Cross-tab Synchronization
+  window.addEventListener('storage', (e) => {
+    if (['prompts', 'folders', 'syncQueue', 'categories', 'theme'].includes(e.key)) {
+      try {
+        const newValue = e.newValue;
+        if (!newValue) return;
+
+        if (e.key === 'prompts') {
+          prompts = JSON.parse(newValue);
+          renderPrompts();
+        } else if (e.key === 'folders') {
+          folders = JSON.parse(newValue);
+          renderFolderStream();
+        } else if (e.key === 'syncQueue') {
+          syncQueue = JSON.parse(newValue);
+          syncService.process();
+        } else if (e.key === 'categories') {
+          categories = JSON.parse(newValue);
+          renderCategories();
+        } else if (e.key === 'theme') {
+          applyTheme();
+        }
+      } catch (err) {
+        console.error("Cross-tab sync error:", err);
+      }
+    }
+  });
 }
 
 function hideTemplateChoiceModal() {
@@ -1149,23 +1187,21 @@ function autoConvertVariables(text) {
       });
     });
 
+    /* 
     // 3. Smart Capitalization Fallback (Catch missed entities)
-    // Splits by spaces/punctuation to find capitalized words
+    // Paused per user request to avoid misidentifying pronouns/nouns
     const words = newText.split(/(\s+|[.,!?;:"'()[\]{}])/g);
     let result = [];
 
     words.forEach((word, i) => {
-      // If it's a word (not space/punct), starts with uppercase, and isn't a common stopword
       const cleanWord = word.replace(/[.,!?;:"'()[\]{}]/g, '');
       if (cleanWord.length > 2 && /^[A-Z]/.test(cleanWord)) {
         const lower = cleanWord.toLowerCase();
-
-        // Safety: Check if it's NOT at the start of a sentence-like segment
         const isStart = (i === 0 || words[i - 1].includes('.') || words[i - 1].includes('\n'));
         const isStopword = STOPWORDS_LITE.has(lower);
 
         if (!isStopword && !isStart) {
-          result.push('{{name}}'); // Fallback to generic name/entity
+          result.push('{{name}}'); 
           return;
         }
       }
@@ -1173,6 +1209,7 @@ function autoConvertVariables(text) {
     });
 
     newText = result.join('');
+    */
     return newText;
   } catch (err) {
     console.error("NLP Error:", err);
@@ -1408,13 +1445,13 @@ async function loadPromptsFromSupabaseAndMerge() {
 
       if (localP.cloud_id && cloudMap.has(localP.cloud_id)) {
         const cloudP = cloudMap.get(localP.cloud_id);
-        const localTime = new Date(localP.updated_at || 0).getTime(); // 0 if missing (legacy)
+        const localTime = new Date(localP.updated_at || 0).getTime();
         const cloudTime = new Date(cloudP.updated_at).getTime();
 
         if (localTime > cloudTime) {
           // Local is newer. Keep Local and queue sync.
           localP.status = 'syncing';
-          localP.is_guest_data = false; // It's cloud-linked now
+          localP.is_guest_data = false;
           mergedPrompts.push(localP);
           if (user_session) {
             syncService.enqueue({ type: 'update', local_id: localP.id, payload: localP });
@@ -1425,10 +1462,21 @@ async function loadPromptsFromSupabaseAndMerge() {
           cloudP.is_guest_data = false;
           mergedPrompts.push(cloudP);
         }
-        // Remove from cloudMap so we don't add it again as "new from cloud"
         cloudMap.delete(localP.cloud_id);
+      } else if (localP.cloud_id && !cloudMap.has(localP.cloud_id)) {
+        // If it has a cloud_id but isn't in the active (non-deleted) cloud fetch,
+        // it was likely deleted on another device.
+        // ONLY remove if it's not currently in the local sync queue (pending update).
+        const isPendingLocalChange = syncQueue.some(q => q.local_id === localP.id);
+        if (!isPendingLocalChange) {
+          // It was deleted elsewhere. Skip adding to mergedPrompts (effectively deleting locally).
+          console.log(`Remote deletion detected for prompt: ${localP.title}`);
+        } else {
+          // We have a pending local change, keep it for now.
+          mergedPrompts.push(localP);
+        }
       } else {
-        // Not in cloud (yet), or local-only. Keep it.
+        // Local-only/unsynced. Keep it.
         mergedPrompts.push(localP);
       }
     });
@@ -1526,7 +1574,7 @@ async function syncCategoriesToCloud() {
 async function syncFolders() {
   if (!supabaseClient) return;
 
-  let query = supabaseClient.from('folders').select('*').order('created_at');
+  let query = supabaseClient.from('folders').select('*').eq('deleted', false).order('created_at');
 
   if (user_session) {
     query = query.eq('user_id', user_session.user.id);
@@ -1547,7 +1595,9 @@ async function createFolder(name) {
     id: crypto.randomUUID(),
     name: name,
     user_id: user_session ? user_session.user.id : null,
-    created_at: new Date().toISOString()
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    deleted: false
   };
 
   folders.push(newFolder);
@@ -1563,27 +1613,35 @@ async function createFolder(name) {
       id: newFolder.id,
       user_id: user_session ? user_session.user.id : null,
       device_id: device_id,
-      name: newFolder.name
+      name: newFolder.name,
+      deleted: false,
+      updated_at: newFolder.updated_at
     }]);
   }
 }
 
 async function deleteFolder(id) {
+  const folder = folders.find(f => f.id === id);
+  if (!folder) return;
   if (!confirm("Delete this folder? Prompts inside will be moved to 'All Prompts'.")) return;
 
-  // Eject prompts locally
+  // Eject prompts locally and sync
   let changed = false;
   prompts.forEach(p => {
     if (p.folder_id === id) {
       p.folder_id = null;
       changed = true;
+      if (user_session) {
+        syncService.enqueue({ type: 'update', local_id: p.id, payload: p });
+      }
     }
   });
 
   if (changed) saveToLocalStorage();
 
-  // Remove folder locally
-  folders = folders.filter(f => f.id !== id);
+  // Soft delete locally
+  folder.deleted = true;
+  folder.updated_at = new Date().toISOString();
   localStorage.setItem('folders', JSON.stringify(folders));
 
   if (activeFolderId === id) activeFolderId = null;
@@ -1591,16 +1649,18 @@ async function deleteFolder(id) {
   renderFolderStream();
   renderPrompts();
 
-  // Cloud Delete
+  // Cloud Soft Delete
   if (supabaseClient) {
-    let query = supabaseClient.from('folders').delete().eq('id', id);
+    let query = supabaseClient.from('folders').update({
+      deleted: true,
+      updated_at: folder.updated_at
+    }).eq('id', id);
     if (user_session) {
       query = query.eq('user_id', user_session.user.id);
     } else {
       query = query.eq('device_id', device_id);
     }
     await query;
-    // Note: SQL 'ON DELETE SET NULL' handles the prompts in cloud automatically!
   }
 }
 
@@ -1612,7 +1672,9 @@ async function syncLocalFoldersToCloud() {
     name: f.name,
     user_id: f.user_id || (user_session ? user_session.user.id : null),
     device_id: f.device_id || device_id,
-    created_at: f.created_at || new Date().toISOString()
+    created_at: f.created_at || new Date().toISOString(),
+    updated_at: f.updated_at || f.created_at || new Date().toISOString(),
+    deleted: f.deleted ?? false
   }));
 
   const { error } = await supabaseClient
@@ -1642,7 +1704,7 @@ function renderFolderStream() {
   container.appendChild(allPill);
 
   // 2. Folder Pills
-  folders.forEach(f => {
+  folders.filter(f => f.deleted !== true).forEach(f => {
     const pill = document.createElement('div');
     pill.className = `folder-pill ${activeFolderId === f.id ? 'active' : ''}`;
     pill.innerHTML = `<span class="icon">📁</span> <span class="text">${escapeHtml(f.name)}</span>`;
@@ -1709,7 +1771,7 @@ function renderFolderDropdown() {
   const optionsContainer = dropdown.querySelector('.dropdown-options');
 
   let html = `<div class="dropdown-option" data-value="">No Folder</div>`;
-  folders.forEach(f => {
+  folders.filter(f => f.deleted !== true).forEach(f => {
     html += `<div class="dropdown-option" data-value="${f.id}">📁 ${escapeHtml(f.name)}</div>`;
   });
 

@@ -74,8 +74,8 @@ body {
 /* Glassmorphism Utility */
 .glass-panel {
     background: var(--glass-bg);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     border: 1px solid var(--glass-border);
     border-radius: var(--border-radius);
     box-shadow: var(--glass-shadow);
@@ -102,15 +102,15 @@ header {
     /* Rounded corners */
     background: rgba(255, 255, 255, 0.4);
     /* Subtle initial glass */
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
     border: 1px solid rgba(255, 255, 255, 0.3);
 
     transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 body.dark-mode header {
-    background: rgba(30, 30, 30, 0.4);
+    background: rgba(30, 30, 30, 0.35);
     border-color: rgba(255, 255, 255, 0.05);
 }
 
@@ -127,8 +127,8 @@ header.is-pinned {
 
     background: var(--glass-bg);
     /* Stronger glass */
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(25px) saturate(180%);
+    -webkit-backdrop-filter: blur(25px) saturate(180%);
     box-shadow: var(--glass-shadow);
 }
 
@@ -3326,4 +3326,148 @@ body.dark-mode .theme-switch-btn.active {
 .danger-btn:hover {
     background: linear-gradient(135deg, #ee5253, #d63031) !important;
     transform: translateY(-2px);
+}
+
+/* ============================================
+   UNIVERSAL RESPONSIVENESS OVERHAUL (SMART STACKING)
+   ============================================ */
+
+@media (max-width: 768px) {
+    body {
+        padding: 10px;
+    }
+
+    .app-container {
+        padding-bottom: 80px;
+    }
+
+    header {
+        padding: 15px 20px;
+        top: 0;
+        margin-top: 0;
+        border-radius: 0 0 16px 16px;
+        gap: 15px;
+    }
+
+    .logo-area h1 {
+        font-size: 1.3rem;
+    }
+
+    .controls {
+        width: 100%;
+        gap: 10px;
+    }
+
+    .search-box {
+        flex-grow: 1;
+        width: 100%;
+    }
+
+    .search-box input {
+        width: 100% !important;
+        font-size: 16px;
+        /* Prevents iOS zoom on focus */
+    }
+
+    .custom-dropdown {
+        flex-grow: 1;
+        min-width: 120px;
+    }
+
+    .dropdown-selected {
+        max-width: none;
+        width: 100%;
+    }
+
+    .paste-area {
+        padding: 16px;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .paste-area textarea {
+        width: 100%;
+        min-height: 100px;
+        font-size: 16px;
+    }
+
+    .paste-area button {
+        width: 100%;
+        padding: 14px;
+    }
+
+    .prompt-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+
+    .prompt-card {
+        padding: 20px;
+    }
+
+    /* Floating Action Button mobile adjustment */
+    .fab {
+        bottom: 25px;
+        right: 25px;
+        width: 56px;
+        height: 56px;
+    }
+
+    /* Welcome Banner */
+    #welcome-banner {
+        flex-direction: column;
+        text-align: center;
+        padding: 24px;
+        gap: 16px;
+    }
+
+    #welcome-banner div:first-child {
+        padding-right: 0;
+    }
+
+    #welcome-banner h2 {
+        font-size: 1.5rem;
+    }
+
+    /* Modal Adjustments */
+    .modal {
+        width: 95%;
+        margin: 10px;
+        padding: 20px;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+
+    .form-actions {
+        flex-direction: column-reverse;
+        gap: 10px;
+    }
+
+    .form-actions button {
+        width: 100%;
+    }
+}
+
+@media (max-width: 480px) {
+    .logo-area h1 {
+        display: none;
+        /* Hide text on very small screens to save space */
+    }
+
+    .logo-area img {
+        margin: 0 auto;
+    }
+
+    header {
+        justify-content: center;
+    }
+
+    .controls {
+        flex-direction: column;
+    }
+
+    .theme-switch-wrapper {
+        width: 100%;
+        justify-content: center;
+    }
 }

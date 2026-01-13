@@ -6,7 +6,7 @@
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-0ZMTW8WC23"></script>
     <script>
         window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
+        function gtag() { dataLayer.push(arguments); }
         gtag('js', new Date());
 
         gtag('config', 'G-0ZMTW8WC23');
@@ -238,7 +238,11 @@
             if (!text) return;
             saveBtn.disabled = true;
             const analysis = analyzePrompt(text);
-            const device_id = localStorage.getItem('device_id') || 'bookmarklet-guest';
+            let device_id = localStorage.getItem('device_id');
+            if (!device_id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(device_id)) {
+                device_id = crypto.randomUUID();
+                localStorage.setItem('device_id', device_id);
+            }
             let user_id = null;
             try {
                 const sessionKey = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'));

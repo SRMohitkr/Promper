@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-0ZMTW8WC23"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag() { dataLayer.push(arguments); }
+        gtag('js', new Date());
+
+        gtag('config', 'G-0ZMTW8WC23');
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Promper</title>
+    <link rel="icon" type="image/png" href="logo.png">
+    <link rel="stylesheet" href="style.css">
+    <meta name="description" content="A beautiful, local-storage based prompt organizer.">
+    <meta name="description" content="A beautiful, local-storage based prompt organizer.">
+
+    <!-- Performance Optimization: Preconnect & Prefetch -->
+    <link rel="dns-prefetch" href="https://unpkg.com">
+    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+    <link rel="preconnect" href="https://unpkg.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+
+    <!-- Deferred Scripts in Head for better LCP -->
+    <script src="https://unpkg.com/compromise" defer></script>
+    <script src="https://unpkg.com/compromise-dates" defer></script>
+    <script src="./cloudConfig.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0"></script>
+    <script src="app.js?v=10" defer></script>
+    <!-- Vercel Web Analytics -->
+    <script>
+        window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+        // Only load in production to avoid local 404 errors
+        if (window.location.hostname !== '127.0.0.1' && window.location.hostname !== 'localhost') {
+            var script = document.createElement('script');
+            script.src = '/_vercel/insights/script.js';
+            script.defer = true;
+            document.head.appendChild(script);
+        }
+    </script>
+</head>
+
+<body>
+    <script>
+        (function () {
+            const theme = localStorage.getItem('theme') || 'system';
+            const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            if (isDark) document.body.classList.add('dark-mode');
+        })();
+    </script>
+
+    <!-- Auth Overlay -->
+    <div id="authOverlay" class="auth-overlay hidden">
+        <div class="auth-card glass-panel">
+            <div class="auth-header">
+                <div class="auth-icon-new">
+                    <img src="logo.png" alt="Promper Saver Logo" class="brand-logo-img" width="64" height="64"
+                        loading="lazy" decoding="async">
+                </div>
+                <h2>Welcome to Promper Saver</h2>
+                <p>Sign in to sync your prompts across all your devices.</p>
+            </div>
+
+            <!-- ADD THIS: Network Warning Modal -->
+            <div id="networkWarning" class="network-overlay hidden" role="dialog" aria-modal="true"
+                aria-labelledby="netTitle">
+                <div class="network-card glass-panel-premium">
+                    <div class="network-icon-container">
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M1 1l22 22"></path>
+                            <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"></path>
+                            <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"></path>
+                            <path d="M10.71 5.05A16 16 0 0 1 22.58 9"></path>
+                            <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"></path>
+                            <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
+                            <line x1="12" y1="20" x2="12.01" y2="20"></line>
+                        </svg>
+                    </div>
+                    <h2 id="netTitle">Connection Unstable</h2>
+                    <p class="network-msg">We're having trouble reaching the server. You can safely continue offline or
+                        try to reconnect.</p>
+
+                    <div class="network-actions">
+                        <!-- Primary Safe Action -->
+                        <button id="netStayGuestBtn" class="primary-btn full-width safe-action">
+                            Stay in Guest Mode (Recommended)
+                        </button>
+
+                        <!-- Secondary Actions -->
+                        <button id="netRetryBtn" class="secondary-btn full-width retry-action">
+                            Retry Connection
+                        </button>
+                        <button id="netTryLoginBtn" class="link-btn small-link">
+                            Try Login Anyway
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 1: Email -->
+            <form id="authEmailForm" class="auth-step">
+                <div class="form-group">
+                    <label for="emailInput">Email Address</label>
+                    <input type="email" id="emailInput" name="email" autocomplete="email" placeholder="name@example.com"
+                        required>
+                </div>
+                <button type="submit" class="primary-btn full-width" id="sendOtpBtn">
+                    <span class="btn-text">Send Magic Code</span>
+                    <span class="loader hidden"></span>
+                </button>
+            </form>
+
+            <!-- Step 2: OTP -->
+            <form id="authOtpForm" class="auth-step hidden">
+                <div class="form-group">
+                    <label for="otp-1">Enter 6-digit Code</label>
+                    <div class="otp-container" id="otpContainer">
+                        <input type="text" maxlength="1" class="otp-input" id="otp-1" name="otp[]"
+                            autocomplete="one-time-code" aria-label="Digit 1" pattern="[0-9]*" inputmode="numeric">
+                        <input type="text" maxlength="1" class="otp-input" id="otp-2" name="otp[]"
+                            autocomplete="one-time-code" aria-label="Digit 2" pattern="[0-9]*" inputmode="numeric">
+                        <input type="text" maxlength="1" class="otp-input" id="otp-3" name="otp[]"
+                            autocomplete="one-time-code" aria-label="Digit 3" pattern="[0-9]*" inputmode="numeric">
+                        <input type="text" maxlength="1" class="otp-input" id="otp-4" name="otp[]"
+                            autocomplete="one-time-code" aria-label="Digit 4" pattern="[0-9]*" inputmode="numeric">
+                        <input type="text" maxlength="1" class="otp-input" id="otp-5" name="otp[]"
+                            autocomplete="one-time-code" aria-label="Digit 5" pattern="[0-9]*" inputmode="numeric">
+                        <input type="text" maxlength="1" class="otp-input" id="otp-6" name="otp[]"
+                            autocomplete="one-time-code" aria-label="Digit 6" pattern="[0-9]*" inputmode="numeric">
+                    </div>
+                </div>
+                <button type="submit" class="primary-btn full-width" id="verifyOtpBtn">
+                    <span class="btn-text">Verify & Login</span>
+                    <span class="loader hidden"></span>
+                </button>
+                <div class="resend-link">
+                    <a href="#" id="backToEmail">Use a different email</a>
+                </div>
+            </form>
+
+            <!-- ADD THIS: Check Email Message -->
+            <div id="authCheckEmail" class="auth-step hidden">
+                <h3>Check your email</h3>
+                <p>We've sent a magic link to <strong id="sentEmailAddress"></strong>.</p>
+                <p>Click the link in the email to sign in.</p>
+                <button type="button" class="secondary-btn full-width" id="closeAuthBtn">Okay</button>
+            </div>
+
+            <div class="auth-footer">
+                <button id="skipAuthBtn" class="link-btn">💨 Skip for now (Guest Mode)</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <!-- ADD THIS: Welcome Banner (Task 1) -->
+        <div id="welcome-banner" class="hidden">
+            <div>
+                <h2>Welcome back! 👋</h2>
+                <p class="banner-subline">Your personal prompt memory — never lose a good prompt again</p>
+            </div>
+            <button class="icon-btn" onclick="document.getElementById('welcome-banner').classList.add('hidden')"
+                style="color:white; opacity:0.8;" aria-label="Dismiss welcome banner">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+
+        <!-- SHARED VIEW CONTAINER (Hidden by default) -->
+        <div id="sharedViewContainer" class="shared-view-container hidden">
+            <!-- Full Professional Navbar -->
+            <nav class="shared-navbar glass-panel">
+                <div class="nav-brand">
+                    <img src="logo.png" alt="Promper Saver Logo" class="brand-logo-img small" width="32" height="32"
+                        decoding="async">
+                    <span class="brand-name">Promper Saver</span>
+                </div>
+                <div class="nav-actions">
+                    <button class="primary-btn small" onclick="window.location.href='index.html'">Try Promper Saver
+                        Free</button>
+                </div>
+            </nav>
+            <div class="glass-panel shared-card-wrapper">
+                <div class="shared-header">
+                    <div class="logo-area small">
+                        <img src="logo.png" alt="Promper Saver Logo" class="brand-logo-img micro" width="24" height="24"
+                            decoding="async">
+                        <span>Shared via Promper Saver</span>
+                    </div>
+                </div>
+
+                <div id="sharedContentArea">
+                    <!-- CONTENT INJECTED HERE -->
+                </div>
+
+                <div class="shared-footer">
+                    <button id="sharedCopyBtn" class="primary-btn full-width">Copy to Clipboard</button>
+                    <button id="sharedSaveBtn" class="secondary-btn full-width" style="margin-top:10px;">Save to My
+                        Library</button>
+                    <p class="shared-meta">Promper Saver does not track you. This link is a static snapshot.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Header -->
+        <header class="glass-panel">
+            <div class="logo-area">
+                <img src="logo.png" alt="Promper Saver Logo" class="brand-logo-img" width="42" height="42"
+                    fetchpriority="high" decoding="async">
+                <h1>Promper Saver</h1>
+            </div>
+
+            <div class="controls">
+                <div class="search-box">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <input type="text" id="searchInput" name="search" aria-label="Search prompts" autocomplete="off"
+                        placeholder="Search by prompt text…">
+                </div>
+
+                <div class="custom-dropdown" id="customCategoryDropdown">
+                    <div class="dropdown-selected" tabindex="0">All Categories</div>
+                    <div class="dropdown-options">
+                        <div class="dropdown-option" data-value="all">All Categories</div>
+                        <div class="dropdown-option" data-value="coding">Coding</div>
+                        <div class="dropdown-option" data-value="writing">Writing</div>
+                        <div class="dropdown-option" data-value="art">Art</div>
+                        <div class="dropdown-option" data-value="other">Other</div>
+                    </div>
+                </div>
+
+                <!-- Moved to footer -->
+
+                <!-- ADD THIS: Auth Profile Slot -->
+                <div id="auth-profile-slot"></div>
+
+                <div class="custom-dropdown" id="settingsDropdown">
+                    <button id="settingsBtn" class="icon-btn" title="Settings">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path
+                                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                            </path>
+                        </svg>
+                    </button>
+                    <div class="dropdown-options" style="right: 0; left: auto; min-width: 220px;">
+                        <div class="dropdown-option" id="userInfoOption"
+                            style="display:none; border-bottom:1px solid rgba(0,0,0,0.1);">
+                            <span class="icon">👤</span>
+                            <span class="text" id="userEmailDisplay">User</span>
+                        </div>
+                        <div class="dropdown-option" id="exportOption">
+                            <span class="icon">📥</span>
+                            <span class="text">Export JSON</span>
+                        </div>
+                        <div class="dropdown-option" id="importOption">
+                            <span class="icon">📤</span>
+                            <span class="text">Import JSON</span>
+                        </div>
+                        <div class="dropdown-option" id="bookmarkletOption">
+                            <span class="icon">🔖</span>
+                            <span class="text">Get Bookmarklet</span>
+                        </div>
+                        <div class="dropdown-option" id="themeOption">
+                            <span class="icon">🌓</span>
+                            <span class="text">Switch Theme</span>
+                        </div>
+
+                        <div class="dropdown-option" id="loginOption" style="color:var(--primary-color);">
+                            <span class="icon">🔐</span>
+                            <span class="text">Login / Signup</span>
+                        </div>
+                    </div>
+                </div>
+                <input type="file" id="fileInput" name="import_file" accept=".json" style="display: none;">
+            </div>
+        </header>
+
+
+        <!-- Folder Stream -->
+        <div id="folderStreamContainer" class="folder-stream-container">
+            <div class="folder-stream" id="folderStream">
+                <!-- JS Injected -->
+            </div>
+        </div>
+
+        <!-- Quick Paste Area -->
+        <div class="paste-area glass-panel">
+            <textarea id="quickPaste" name="quick_paste" aria-label="Quick paste prompt"
+                placeholder="Paste any prompt here to save it instantly…"></textarea>
+            <button id="quickAddBtn">Save</button>
+        </div>
+
+        <!-- Main Grid -->
+        <main id="promptGrid" class="prompt-grid">
+            <!-- Prompts will be injected here -->
+        </main>
+
+        <!-- Show More Button -->
+        <div id="showMoreContainer" class="show-more-container hidden">
+            <button id="loadMoreBtn" class="load-more-btn">
+                <span class="btn-text">Show More</span>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Floating Action Button -->
+    <button id="fab" class="fab" title="Add New Prompt">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+    </button>
+
+    <!-- Modal -->
+    <div id="modalOverlay" class="modal-overlay hidden">
+        <div class="modal glass-panel">
+            <div class="modal-header">
+                <h2 id="modalTitle">Capture Prompt</h2>
+                <button id="closeModal" class="close-btn">&times;</button>
+            </div>
+            <form id="promptForm">
+                <input type="hidden" id="promptId">
+                <div class="form-group">
+                    <label for="title">Title</label>
+                    <input type="text" id="title" name="title" autocomplete="off" placeholder="Enter title (optional)">
+                </div>
+                <div class="form-group">
+                    <label for="folderDropdownTrigger">Folder (Optional)</label>
+                    <div class="custom-dropdown" id="folderDropdown" style="width: 100%;">
+                        <button type="button" class="dropdown-selected" id="folderDropdownTrigger"
+                            aria-haspopup="listbox" aria-expanded="false">No Folder</button>
+                        <div class="dropdown-options"></div>
+                    </div>
+                    <input type="hidden" id="folder" name="folder">
+                </div>
+                <div class="form-group">
+                    <label for="modalCategoryDropdownTrigger">Category</label>
+                    <div class="custom-dropdown" id="modalCategoryDropdown" style="width: 100%;">
+                        <button type="button" class="dropdown-selected" id="modalCategoryDropdownTrigger"
+                            aria-haspopup="listbox" aria-expanded="false">Select Category</button>
+                        <div class="dropdown-options">
+                            <!-- Options populated by JS -->
+                        </div>
+                    </div>
+                    <input type="text" id="category" name="category" value="" tabindex="-1"
+                        style="position:absolute; opacity:0; pointer-events:none; width:0; height:0; margin:0; padding:0; border:0;">
+                </div>
+                <div class="form-group">
+                    <label for="body">Prompt</label>
+                    <textarea id="body" name="body" rows="5" placeholder="Enter your prompt here..."
+                        required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="tagInput">Tags</label>
+                    <div class="tag-input-wrapper" id="tagInputWrapper">
+                        <div id="tagChips" class="tag-chips"></div>
+                        <input type="text" id="tagInput" name="tag_input" autocomplete="off" placeholder="Add a tag...">
+                        <div id="tagSuggestions" class="tag-suggestions hidden"></div>
+                    </div>
+                    <!-- Hidden input to store CSV for form submission -->
+                    <input type="hidden" id="tags" name="tags">
+                </div>
+                <div class="form-actions">
+                    <button type="button" id="autoFillBtn" class="secondary-btn"
+                        title="Auto-fill metadata from body text">✨ Auto-Fill</button>
+                    <button type="submit" class="primary-btn">Done</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Template Choice Modal -->
+    <div id="templateChoiceOverlay" class="modal-overlay hidden">
+        <div class="modal glass-panel">
+            <div class="modal-header">
+                <h2>Create Template?</h2>
+                <button onclick="document.getElementById('templateChoiceOverlay').classList.add('hidden')"
+                    class="close-btn">&times;</button>
+            </div>
+            <p class="modal-subtitle">Do you want to turn this prompt into a template by selecting variables?</p>
+            <div class="form-actions" style="margin-top: 24px;">
+                <button id="templateChoiceNo" class="secondary-btn">No, Save as Text</button>
+                <button id="templateChoiceYes" class="primary-btn">Yes, Select Variables</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Variable Fill Modal -->
+    <div id="variableModalOverlay" class="modal-overlay hidden">
+        <div class="modal glass-panel">
+            <div class="modal-header">
+                <h2 id="varModalTitle">Fill in the Blanks</h2>
+                <button id="closeVarModal" class="close-btn">&times;</button>
+            </div>
+            <p class="modal-subtitle">Customize your prompt template before copying.</p>
+            <div id="variableFields" class="variable-fields">
+                <!-- Fields injected by JS -->
+            </div>
+            <div class="form-actions" style="margin-top: 24px;">
+                <button id="copyFinalBtn" class="primary-btn copy-final-btn">
+                    <span class="btn-text">Copy Final Prompt</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+
+
+
+    <!-- Variable Selection Modal -->
+    <div id="varSelectOverlay" class="modal-overlay hidden">
+        <div class="modal glass-panel var-select-modal">
+            <div class="modal-header">
+                <h2>Select Variables</h2>
+                <button id="closeVarSelectModal" class="close-btn">&times;</button>
+            </div>
+            <p class="modal-subtitle">Click on words to mark them as variables. They will become fillable placeholders.
+            </p>
+            <div id="varSelectPreview" class="var-select-preview">
+                <!-- Words injected by JS -->
+            </div>
+            <div class="form-actions" style="margin-top: 24px;">
+                <button id="confirmVarSelectBtn" class="primary-btn">Confirm & Save Template</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SHARE OPTIONS MODAL (YouTube Style) -->
+    <div id="shareModalOverlay" class="modal-overlay hidden">
+        <div class="modal glass-panel share-modal">
+            <div class="modal-header">
+                <h2>Share</h2>
+                <button id="closeShareModal" class="close-btn">&times;</button>
+            </div>
+
+            <!-- Social Carousel -->
+            <div class="share-carousel-wrapper">
+                <div class="share-carousel">
+                    <!-- WhatsApp -->
+                    <a href="#" target="_blank" class="share-icon-btn whatsapp" id="shareWa">
+                        <div class="icon-circle">
+                            <svg viewBox="0 0 24 24" fill="white" width="24" height="24">
+                                <path
+                                    d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
+                            </svg>
+                        </div>
+                        <span>WhatsApp</span>
+                    </a>
+                    <!-- X / Twitter -->
+                    <a href="#" target="_blank" class="share-icon-btn x-twitter" id="shareX">
+                        <div class="icon-circle">
+                            <svg viewBox="0 0 24 24" fill="white" width="20" height="20">
+                                <path
+                                    d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                            </svg>
+                        </div>
+                        <span>X</span>
+                    </a>
+                    <!-- Email -->
+                    <a href="#" class="share-icon-btn email" id="shareEmail">
+                        <div class="icon-circle">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24"
+                                height="24">
+                                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z">
+                                </path>
+                                <polyline points="22,6 12,13 2,6"></polyline>
+                            </svg>
+                        </div>
+                        <span>Email</span>
+                    </a>
+                    <!-- Copy Generic -->
+                    <button class="share-icon-btn copy-generic" id="shareCopyIcon">
+                        <div class="icon-circle">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24"
+                                height="24">
+                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                            </svg>
+                        </div>
+                        <span>Embed</span>
+                    </button>
+                    <!-- LinkedIn -->
+                    <a href="#" target="_blank" class="share-icon-btn linkedin" id="shareLinkedin">
+                        <div class="icon-circle">
+                            <svg viewBox="0 0 24 24" fill="white" width="20" height="20">
+                                <path
+                                    d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z">
+                                </path>
+                                <rect x="2" y="9" width="4" height="12"></rect>
+                                <circle cx="4" cy="4" r="2"></circle>
+                            </svg>
+                        </div>
+                        <span>LinkedIn</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Copy Link Box -->
+            <div class="share-notion-box">
+                <input type="text" id="shareInputLink" readonly value="https://promper-saver.app/s/..." />
+                <button id="shareCopyBtnMain" class="primary-btn small-radius">Copy</button>
+            </div>
+
+        </div>
+    </div>
+
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast hidden">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <span id="toastMessage">Saved!</span>
+        <button id="toastUndo" class="toast-undo hidden"
+            style="margin-left: 10px; padding: 4px 8px; font-size: 0.8rem; height: auto;">Undo</button>
+    </div>
+
+    <!-- About Us Section -->
+    <section class="about-section glass-panel">
+        <h2>About Promper Saver</h2>
+        <p>Promper Saver is your personal sanctuary for creativity. Designed for writers, coders, and artists, it helps
+            you organize, store, and quickly access your most valuable prompts. Whether you're crafting the next great
+            novel, debugging complex code, or generating AI art, we keep your inspiration just a click away.</p>
+        <div class="features-grid">
+            <div class="feature-item">
+                <span class="feature-icon">✨</span>
+                <h3>Fast Access</h3>
+                <p>Instant search and quick-copy ensure your workflow never breaks.</p>
+            </div>
+            <div class="feature-item">
+                <span class="feature-icon">🔐 </span>
+                <h3>Local & Private</h3>
+                <p>Your data stays in your browser. No cloud, no tracking, just you.</p>
+            </div>
+            <div class="feature-item">
+                <span class="feature-icon">🧿</span>
+                <h3>Beautiful Design</h3>
+                <p>A clean, glassmorphic interface that inspires you to create.</p>
+            </div>
+        </div>
+    </section>
+
+
+
+    <footer class="app-footer glass-panel">
+        <div class="footer-text">Made with <span>❤️</span> by SR.Mohitkr</div>
+        <div class="footer-right-content">
+            <!-- Theme Switcher (Right Side Content) -->
+            <div class="theme-switch-wrapper">
+                <button class="theme-switch-btn" data-theme="system" title="System Preference">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                        <line x1="8" y1="21" x2="16" y2="21"></line>
+                        <line x1="12" y1="17" x2="12" y2="21"></line>
+                    </svg>
+                </button>
+                <button class="theme-switch-btn" data-theme="light" title="Light Mode">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                </button>
+                <button class="theme-switch-btn" data-theme="dark" title="Dark Mode">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <div class="footer-links">
+            <a href="https://www.youtube.com/@sr.mohitkrofficial" target="_blank" title="YouTube" class="youtube-link">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path
+                        d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z" />
+                    <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02" />
+                </svg>
+            </a>
+            <a href="mailto:sr.mohitkr@gmail.com" title="Gmail" class="gmail-link">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                    <polyline points="22,6 12,13 2,6" />
+                </svg>
+            </a>
+            <a href="https://facebook.com" target="_blank" title="Facebook" class="facebook-link">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z" />
+                </svg>
+            </a>
+        </div>
+    </footer>
+
+    <!-- Scripts moved to head with defer -->
+
+    <!-- Bookmarklet Modal -->
+    <div id="bookmarkletModalOverlay" class="modal-overlay hidden">
+        <div class="modal glass-panel modal-bookmarklet">
+            <div class="modal-header">
+                <h2>Genius Bookmarklet</h2>
+                <button id="closeBookmarkletModal" class="close-btn">&times;</button>
+            </div>
+
+            <div class="slider-container">
+                <div class="slider-viewport" id="onboardingSlider">
+                    <!-- Page 1: Installation -->
+                    <div class="slider-page active">
+                        <div class="illustration">🎯</div>
+                        <h3>Step 1: Installation</h3>
+                        <p><b>Drag</b> the button below to your <b>bookmarks bar</b>. It's the <span
+                                class="highlight-word">secret key</span> to your memory.</p>
+                        <div style="margin-top: 25px;">
+                            <a id="bookmarkletLink" href="#" onclick="return false;"
+                                style="display: inline-block; padding: 14px 28px; background: var(--primary-gradient); color: white; border-radius: 12px; text-decoration: none; font-weight: 700; cursor: move; box-shadow: 0 4px 15px rgba(74, 144, 226, 0.3);">🚀
+                                Save to Promper Saver</a>
+                        </div>
+                    </div>
+                    <!-- Page 2: Usage -->
+                    <div class="slider-page">
+                        <div class="illustration">🧠</div>
+                        <h3>Step 2: Capture Ideas</h3>
+                        <p><b>Select any text</b> on any website and click your new bookmarklet. <span
+                                class="highlight-word">No tab switching</span>, no friction.
+                        </p>
+                        <div style="margin-top: 20px; font-size: 0.9rem; opacity: 0.7;">Works on OpenAI, Claude, GitHub,
+                            and more.</div>
+                    </div>
+                    <!-- Page 3: Done -->
+                    <div class="slider-page">
+                        <div class="illustration">⚡</div>
+                        <h3>Step 3: Success</h3>
+                        <p>Press <b>⌘ + Enter</b> to save <span class="highlight-word">instantly</span>. Promper Saver
+                            auto-detects titles and categories for you.
+                        </p>
+                        <div
+                            style="margin-top: 20px; font-size: 0.9rem; font-weight: 600; color: var(--primary-color);">
+                            Capture in < 1 second.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="slider-nav">
+                    <button id="prevOnboarding" class="slider-btn" disabled>Back</button>
+                    <div class="slider-dots" id="onboardingDots">
+                        <div class="dot active" data-index="0"></div>
+                        <div class="dot" data-index="1"></div>
+                        <div class="dot" data-index="2"></div>
+                    </div>
+                    <button id="nextOnboarding" class="slider-btn primary">Next</button>
+                </div>
+            </div>
+        </div>
+
+
+
+
+
+        <!-- Logout Confirmation Modal -->
+        <div id="logoutConfirmOverlay" class="modal-overlay hidden">
+            <div class="modal glass-panel confirm-modal">
+                <div class="modal-header">
+                    <h2>Log Out?</h2>
+                    <button id="closeLogoutConfirm" class="close-btn">&times;</button>
+                </div>
+                <p class="modal-subtitle">Are you sure you want to log out? You'll need to sign in again to sync your
+                    prompts.</p>
+                <div class="form-actions" style="margin-top: 24px;">
+                    <button id="cancelLogoutBtn" class="secondary-btn">Cancel</button>
+                    <button id="confirmLogoutBtn" class="primary-btn danger-btn">Log Out</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Guest Sync Choice Modal -->
+        <div id="syncGuestOverlay" class="modal-overlay hidden">
+            <div class="modal glass-panel confirm-modal">
+                <div class="modal-header">
+                    <h2>Save your guest prompts?</h2>
+                    <button id="closeSyncGuest" class="close-btn">&times;</button>
+                </div>
+                <p id="syncGuestSubtitle" class="modal-subtitle">You have prompts saved while using guest mode. Would
+                    you like to save them to your account so they're available on all your devices?</p>
+
+                <div class="modal-body-pushed">
+                    <label class="checkbox-container">
+                        <input type="checkbox" id="dontAskSync">
+                        <span class="checkbox-text">Don't ask again</span>
+                    </label>
+                </div>
+
+                <div class="form-actions" style="margin-top: 24px;">
+                    <button id="keepAsGuestBtn" class="secondary-btn">
+                        <span class="btn-text">Keep Local Only</span>
+                        <span class="loader hidden"></span>
+                    </button>
+                    <button id="syncNowBtn" class="primary-btn">
+                        <span class="btn-text">✅ Save to my account</span>
+                        <span class="loader hidden"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Vercel Speed Insights -->
+        <script>
+            window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+            // Only load in production to avoid local 404 errors
+            if (window.location.hostname !== '127.0.0.1' && window.location.hostname !== 'localhost') {
+                var script = document.createElement('script');
+                script.src = '/_vercel/speed-insights/script.js';
+                script.defer = true;
+                document.body.appendChild(script);
+            }
+        </script>
+</body>
+
+</html>
