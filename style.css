@@ -1391,6 +1391,61 @@ body.dark-mode .form-group textarea {
     resize: vertical;
 }
 
+.email-input-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+}
+
+.email-suggestion {
+    display: flex;
+    justify-content: flex-start;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.email-suggestion.hidden {
+    display: none;
+}
+
+.suggestion-btn {
+    background: rgba(74, 144, 226, 0.08);
+    color: var(--primary-color);
+    border: 1px dashed var(--primary-color);
+    border-radius: 20px;
+    padding: 6px 16px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.suggestion-btn::before {
+    content: '📧';
+    font-size: 0.9rem;
+}
+
+.suggestion-btn:hover {
+    background: var(--primary-color);
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(74, 144, 226, 0.2);
+    border-style: solid;
+}
+
+body.dark-mode .suggestion-btn {
+    background: rgba(107, 163, 255, 0.1);
+    border-color: rgba(107, 163, 255, 0.4);
+}
+
+body.dark-mode .suggestion-btn:hover {
+    background: var(--primary-color);
+    box-shadow: 0 4px 12px rgba(107, 163, 255, 0.3);
+}
+
 .form-actions {
     display: flex;
     gap: 10px;

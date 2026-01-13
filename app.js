@@ -249,6 +249,8 @@ const skipAuthBtn = document.getElementById('skipAuthBtn');
 const userInfoOption = document.getElementById('userInfoOption');
 const userEmailDisplay = document.getElementById('userEmailDisplay');
 const loginOption = document.getElementById('loginOption');
+const emailSuggestion = document.getElementById('emailSuggestion');
+const applyEmailSuggestion = document.getElementById('applyEmailSuggestion');
 
 const bookmarkletLink = document.getElementById('bookmarkletLink');
 const closeBookmarkletModal = document.getElementById('closeBookmarkletModal');
@@ -415,14 +417,15 @@ function setupAuthListeners() {
     // and your email template includes {{ .Token }}
     // Switch to Code Flow (More reliable than Links)
 
-    // Switch back to Magic Link (User Request)
+    // Always redirect Magic Links to app.html to avoid "Intermediate Website" tracking issues
+    // and ensure users land on the main tool page directly.
+    const redirectUrl = window.location.origin + window.location.pathname.replace(/\/[^\/]*$/, '/app.html');
+
     const { data, error } = await supabaseClient.auth.signInWithOtp({
       email,
       options: {
         shouldCreateUser: true,
-        emailRedirectTo: window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1')
-          ? window.location.origin + '/app.html'
-          : window.location.origin + '/app.html'
+        emailRedirectTo: redirectUrl
       }
     });
 
@@ -577,6 +580,27 @@ function setupAuthListeners() {
     });
   }
 
+  // Email Suggestion Logic (@gmail.com)
+  if (emailInput && emailSuggestion && applyEmailSuggestion) {
+    emailInput.addEventListener('input', () => {
+      const val = emailInput.value.trim();
+      // Show suggestion if there's text but no @ symbol yet
+      if (val.length > 0 && !val.includes('@')) {
+        emailSuggestion.classList.remove('hidden');
+      } else {
+        emailSuggestion.classList.add('hidden');
+      }
+    });
+
+    applyEmailSuggestion.addEventListener('click', () => {
+      const val = emailInput.value.trim();
+      if (val && !val.includes('@')) {
+        emailInput.value = val + '@gmail.com';
+        emailSuggestion.classList.add('hidden');
+        emailInput.focus();
+      }
+    });
+  }
 }
 
 function updateAuthUI() {
@@ -1569,21 +1593,37 @@ async function syncCategoriesToCloud() {
   }, { onConflict: 'device_id' });
 }
 
-// ---------- Folder System Logic ----------
-
 async function syncFolders() {
   if (!supabaseClient) return;
 
+  // Attempt 1: Full Query (standard schema)
   let query = supabaseClient.from('folders').select('*').eq('deleted', false).order('created_at');
-
   if (user_session) {
     query = query.eq('user_id', user_session.user.id);
   } else {
     query = query.eq('device_id', device_id);
   }
 
-  const { data, error } = await query;
-  if (data && !error) {
+  let { data, error } = await query;
+
+  // Fallback: If 400 (likely missing columns like 'deleted' or 'device_id'), try a minimal query
+  if (error && error.status === 400) {
+    console.warn("Folder sync fetch failed (likely schema mismatch), retrying with minimal query...", error.message);
+    let fallbackQuery = supabaseClient.from('folders').select('*');
+    if (user_session) {
+      fallbackQuery = fallbackQuery.eq('user_id', user_session.user.id);
+    }
+    const fallbackRes = await fallbackQuery;
+    data = fallbackRes.data;
+    error = fallbackRes.error;
+  }
+
+  if (error) {
+    console.warn("Folder sync fetch fatal failure:", error.message);
+    return;
+  }
+
+  if (data) {
     folders = data;
     localStorage.setItem('folders', JSON.stringify(folders));
     renderFolderStream();
@@ -1609,14 +1649,26 @@ async function createFolder(name) {
   renderPrompts();
 
   if (supabaseClient) {
-    await supabaseClient.from('folders').insert([{
+    const folderPayload = {
       id: newFolder.id,
       user_id: user_session ? user_session.user.id : null,
-      device_id: device_id,
       name: newFolder.name,
-      deleted: false,
       updated_at: newFolder.updated_at
-    }]);
+    };
+
+    // Add optional columns if they exist in our local state
+    if (device_id) folderPayload.device_id = device_id;
+    folderPayload.deleted = false;
+
+    const { error } = await supabaseClient.from('folders').insert([folderPayload]);
+    if (error) {
+      console.warn("Folder cloud creation failed (likely schema mismatch):", error.message);
+      // If it's a 400, try again without device_id/deleted just in case
+      if (error.status === 400) {
+        const { id, user_id, name, updated_at } = folderPayload;
+        await supabaseClient.from('folders').insert([{ id, user_id, name, updated_at }]);
+      }
+    }
   }
 }
 
@@ -1681,7 +1733,9 @@ async function syncLocalFoldersToCloud() {
     .from('folders')
     .upsert(foldersToSync, { onConflict: 'id', ignoreDuplicates: false });
 
-  if (error) console.error("Folder sync error", error);
+  if (error) {
+    console.warn("Folder cloud sync failed. This often happens if the 'folders' table doesn't have the expected columns (device_id, deleted, etc.) in Supabase.", error.message);
+  }
 }
 
 // ---------- Folder UI Renderer ----------

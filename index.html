@@ -13,7 +13,7 @@
     </script>
     <script>
         (function () {
-            // Robust check for Supabase session to redirect logged-in users to the app immediately
+            // 1. Robust check for Supabase session to redirect logged-in users to the app immediately
             try {
                 const keys = Object.keys(localStorage);
                 const sessionKey = keys.find(k => k.startsWith('sb-') && k.endsWith('-auth-token'));
@@ -22,10 +22,21 @@
                     // Only redirect if it's a valid session with an access token
                     if (sessionData && sessionData.access_token) {
                         window.location.replace('app.html');
+                        return;
                     }
                 }
             } catch (err) {
                 console.error("Redirect check failed:", err);
+            }
+
+            // 2. Check for Magic Link / Auth Auth Callback parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const hashParams = new URLSearchParams(window.location.hash.slice(1));
+
+            // If we have a PKCE code or an access token in the URL, forward to app.html
+            if (urlParams.has('code') || hashParams.has('access_token') || urlParams.has('error')) {
+                const target = 'app.html' + window.location.search + window.location.hash;
+                window.location.replace(target);
             }
         })();
     </script>

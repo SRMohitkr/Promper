@@ -107,8 +107,14 @@
             <form id="authEmailForm" class="auth-step">
                 <div class="form-group">
                     <label for="emailInput">Email Address</label>
-                    <input type="email" id="emailInput" name="email" autocomplete="email" placeholder="name@example.com"
-                        required>
+                    <div class="email-input-container">
+                        <input type="email" id="emailInput" name="email" autocomplete="email"
+                            placeholder="name@example.com" required>
+                        <div id="emailSuggestion" class="email-suggestion hidden">
+                            <button type="button" id="applyEmailSuggestion" class="suggestion-btn">Quick Add:
+                                @gmail.com</button>
+                        </div>
+                    </div>
                 </div>
                 <button type="submit" class="primary-btn full-width" id="sendOtpBtn">
                     <span class="btn-text">Send Magic Code</span>
