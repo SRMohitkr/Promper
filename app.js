@@ -125,6 +125,19 @@ class SyncService {
   async executeOp(op) {
     try {
       if (op.type === 'create' || op.type === 'update') {
+        // Validate folder_id before syncing to prevent foreign key errors
+        let validatedFolderId = op.payload.folder_id;
+
+        if (validatedFolderId) {
+          // Check if folder exists locally
+          const folderExists = folders.some(f => f.id === validatedFolderId);
+
+          if (!folderExists) {
+            console.warn(`Folder ${validatedFolderId} not found locally, setting to null`);
+            validatedFolderId = null;
+          }
+        }
+
         const upsertData = {
           user_id: user_session?.user?.id || op.payload.user_id,
           device_id: device_id,
@@ -133,7 +146,7 @@ class SyncService {
           tags: Array.isArray(op.payload.tags) ? op.payload.tags.join(',') : op.payload.tags,
           category: op.payload.category,
           favorite: op.payload.favorite,
-          folder_id: op.payload.folder_id,
+          folder_id: validatedFolderId,
           total_usage: op.payload.total_usage || 0,
           deleted: op.payload.deleted ?? false,
           client_mutation_id: op.local_id,
@@ -150,7 +163,37 @@ class SyncService {
           .select()
           .single();
 
-        if (error) throw error;
+        if (error) {
+          // Special handling for foreign key constraint errors
+          if (error.message && error.message.includes('foreign key constraint')) {
+            console.warn('Foreign key constraint error, likely missing folder. Retrying without folder_id...');
+
+            // Retry without folder_id
+            upsertData.folder_id = null;
+            const retryResult = await supabaseClient
+              .from('prompt_saves')
+              .upsert(upsertData, {
+                onConflict: op.payload.cloud_id ? 'id' : 'client_mutation_id'
+              })
+              .select()
+              .single();
+
+            if (retryResult.error) throw retryResult.error;
+
+            // Update local state to reflect folder_id was removed
+            const localIdx = prompts.findIndex(p => p.id === op.local_id);
+            if (localIdx > -1) {
+              prompts[localIdx].folder_id = null;
+              prompts[localIdx].cloud_id = retryResult.data.id;
+              prompts[localIdx].status = 'synced';
+              saveToLocalStorage();
+            }
+
+            return true;
+          }
+
+          throw error;
+        }
 
         // Sync local reference
         const idx = prompts.findIndex(p => p.id === op.local_id);
@@ -190,7 +233,12 @@ if (SUPABASE_URL && SUPABASE_KEY) {
       flowType: 'pkce',
       detectSessionInUrl: true,
       persistSession: true,
-      autoRefreshToken: true
+      autoRefreshToken: true,
+      // Mobile-specific: Ensure storage is accessible
+      storage: window.localStorage,
+      storageKey: 'sb-' + new URL(SUPABASE_URL).hostname.split('.')[0] + '-auth-token',
+      // Critical for mobile: Always try to recover session from URL on load
+      debug: false
     },
     global: { headers: { 'x-device-id': device_id } }
   });
@@ -303,8 +351,88 @@ async function initApp() {
       return;
     }
 
-    // Check initial session
+    // CRITICAL FIX: Handle magic link authentication on mobile
+    // Mobile browsers often open magic links in separate contexts (in-app browsers, new tabs)
+    // We need to explicitly exchange tokens from the URL
     if (supabaseClient) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const hashParams = new URLSearchParams(window.location.hash.slice(1));
+
+      // Get the auth code if present
+      const authCode = urlParams.get('code') || hashParams.get('code');
+      const accessToken = hashParams.get('access_token');
+      const hasError = urlParams.has('error') || hashParams.has('error');
+
+      // Handle errors first
+      if (hasError) {
+        const errorDesc = urlParams.get('error_description') || hashParams.get('error_description') || 'Authentication failed';
+        console.error('Auth error from magic link:', errorDesc);
+        showToast('Login failed: ' + errorDesc);
+        // Clean URL
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+      // Handle PKCE code exchange (most common on mobile)
+      else if (authCode) {
+        console.log('🔐 Magic link with PKCE code detected, exchanging tokens...');
+
+        try {
+          // For mobile: Force session exchange from URL
+          // This is critical because mobile browsers may not have access to the original session
+          const { data: exchangeData, error: exchangeError } = await supabaseClient.auth.exchangeCodeForSession(authCode);
+
+          if (exchangeError) {
+            console.error('Token exchange failed:', exchangeError);
+
+            // Show user-friendly error
+            if (exchangeError.message.includes('expired')) {
+              showToast('⚠️ Login link expired. Please request a new one.');
+            } else if (exchangeError.message.includes('already')) {
+              showToast('⚠️ Login link already used. Please request a new one.');
+            } else {
+              showToast('⚠️ Login failed. Please try again.');
+            }
+
+            // Clean URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+          } else if (exchangeData?.session) {
+            console.log('✅ Magic link authentication successful!');
+            user_session = exchangeData.session;
+
+            // Clean URL immediately to prevent re-processing
+            window.history.replaceState({}, document.title, window.location.pathname);
+
+            // Update UI immediately
+            updateAuthUI();
+            renderUserProfile(exchangeData.session.user);
+
+            // Show success feedback
+            showToast(`Welcome back, ${exchangeData.session.user.email.split('@')[0]}!`);
+
+            // Sync data
+            await syncData();
+
+            return; // Exit early, session is established
+          }
+        } catch (err) {
+          console.error('Magic link processing error:', err);
+          showToast('⚠️ Login failed. Please try again.');
+
+          // Clean URL
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      }
+      // Handle direct access token (less common)
+      else if (accessToken) {
+        console.log('🔐 Magic link with access token detected');
+        // Supabase should automatically handle this via detectSessionInUrl
+        // Just clean the URL after a brief moment
+        setTimeout(() => {
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }, 1000);
+      }
+
+
+      // Check initial session (for already logged-in users)
       const { data: { session }, error } = await supabaseClient.auth.getSession();
       if (error) console.error("Session fetch error:", error);
       user_session = session;
@@ -327,10 +455,13 @@ async function initApp() {
 
       // Listen for auth changes (Magic Link redirects, logouts, etc.)
       supabaseClient.auth.onAuthStateChange(async (event, session) => {
+        console.log('Auth state changed:', event, session ? 'Session exists' : 'No session');
         user_session = session;
+
         if (event === 'SIGNED_IN' && session) {
           updateAuthUI();
           renderUserProfile(session.user);
+
           // Show welcome banner only once per login session
           if (!sessionStorage.getItem('welcomeBannerShown')) {
             const banner = document.getElementById('welcome-banner');
@@ -345,9 +476,6 @@ async function initApp() {
               email: session.user.email,
               last_login: new Date().toISOString()
             });
-
-
-
           } catch (e) { console.warn("Profile sync failed", e); }
 
           // Refined Migration Trigger
@@ -370,6 +498,13 @@ async function initApp() {
           updateAuthUI();
           renderUserProfile(null);
           renderPrompts();
+        } else if (event === 'TOKEN_REFRESHED' && session) {
+          // Ensure we update the global session on token refresh
+          user_session = session;
+          console.log('Token refreshed successfully');
+        } else if (event === 'USER_UPDATED' && session) {
+          user_session = session;
+          updateAuthUI();
         }
       });
     } else {
@@ -1729,12 +1864,33 @@ async function syncLocalFoldersToCloud() {
     deleted: f.deleted ?? false
   }));
 
-  const { error } = await supabaseClient
+  let { error } = await supabaseClient
     .from('folders')
     .upsert(foldersToSync, { onConflict: 'id', ignoreDuplicates: false });
 
+  // Fallback: If schema mismatch (400 error), try with minimal columns only
+  if (error && error.status === 400 && error.message.includes('column')) {
+    console.warn("Folder sync failed with full schema, retrying with minimal columns...", error.message);
+
+    const minimalFolders = folders.map(f => ({
+      id: f.id,
+      name: f.name,
+      user_id: f.user_id || (user_session ? user_session.user.id : null),
+      created_at: f.created_at || new Date().toISOString()
+    }));
+
+    const fallbackResult = await supabaseClient
+      .from('folders')
+      .upsert(minimalFolders, { onConflict: 'id', ignoreDuplicates: false });
+
+    error = fallbackResult.error;
+  }
+
   if (error) {
-    console.warn("Folder cloud sync failed. This often happens if the 'folders' table doesn't have the expected columns (device_id, deleted, etc.) in Supabase.", error.message);
+    console.warn("⚠️ Folder cloud sync failed. Please run the database migration script.", error.message);
+    // Don't throw - allow the app to continue working locally
+  } else {
+    console.log("✅ Folders synced to cloud successfully");
   }
 }
 

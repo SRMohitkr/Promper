@@ -48,9 +48,19 @@
 <body>
     <script>
         (function () {
+            // Apply theme immediately to avoid flash
             const theme = localStorage.getItem('theme') || 'system';
             const isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
             if (isDark) document.body.classList.add('dark-mode');
+
+            // MOBILE FIX: Log magic link detection for debugging
+            const urlParams = new URLSearchParams(window.location.search);
+            const hashParams = new URLSearchParams(window.location.hash.slice(1));
+
+            if (urlParams.has('code') || hashParams.has('access_token')) {
+                console.log('🔐 App loaded with auth parameters - Supabase will process this');
+                console.log('Auth code present:', urlParams.has('code') || hashParams.has('code'));
+            }
         })();
     </script>
 

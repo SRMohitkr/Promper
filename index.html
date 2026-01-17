@@ -13,30 +13,56 @@
     </script>
     <script>
         (function () {
-            // 1. Robust check for Supabase session to redirect logged-in users to the app immediately
-            try {
-                const keys = Object.keys(localStorage);
-                const sessionKey = keys.find(k => k.startsWith('sb-') && k.endsWith('-auth-token'));
-                if (sessionKey) {
-                    const sessionData = JSON.parse(localStorage.getItem(sessionKey));
-                    // Only redirect if it's a valid session with an access token
-                    if (sessionData && sessionData.access_token) {
-                        window.location.replace('app.html');
-                        return;
-                    }
-                }
-            } catch (err) {
-                console.error("Redirect check failed:", err);
-            }
+            // CRITICAL: Magic Link Authentication Handler for Mobile
+            // Mobile browsers often open magic links in separate contexts (in-app browsers, new tabs)
+            // This script ensures authentication parameters are forwarded to the app immediately
 
-            // 2. Check for Magic Link / Auth Auth Callback parameters
+            // 1. Check for Auth Callback Parameters FIRST (highest priority)
             const urlParams = new URLSearchParams(window.location.search);
             const hashParams = new URLSearchParams(window.location.hash.slice(1));
 
-            // If we have a PKCE code or an access token in the URL, forward to app.html
-            if (urlParams.has('code') || hashParams.has('access_token') || urlParams.has('error')) {
+            // Check if this is a magic link callback
+            const hasAuthCode = urlParams.has('code') || hashParams.has('code');
+            const hasAccessToken = hashParams.has('access_token');
+            const hasError = urlParams.has('error') || hashParams.has('error');
+
+            if (hasAuthCode || hasAccessToken || hasError) {
+                console.log('🔐 Magic link detected on landing page, redirecting to app...');
+
+                // IMPORTANT: Preserve ALL URL parameters and hash
                 const target = 'app.html' + window.location.search + window.location.hash;
+
+                // Use replace to avoid adding to browser history
                 window.location.replace(target);
+                return; // Stop execution
+            }
+
+            // 2. Check for existing session (for already logged-in users)
+            try {
+                const keys = Object.keys(localStorage);
+                const sessionKey = keys.find(k => k.startsWith('sb-') && k.endsWith('-auth-token'));
+
+                if (sessionKey) {
+                    const sessionData = JSON.parse(localStorage.getItem(sessionKey));
+
+                    // Only redirect if it's a valid, non-expired session
+                    if (sessionData && sessionData.access_token) {
+                        const expiresAt = sessionData.expires_at;
+                        const now = Math.floor(Date.now() / 1000);
+
+                        // Check if token is still valid (not expired)
+                        if (!expiresAt || expiresAt > now) {
+                            console.log('✅ Active session found, redirecting to app...');
+                            window.location.replace('app.html');
+                            return;
+                        } else {
+                            console.log('⚠️ Session expired, clearing...');
+                            localStorage.removeItem(sessionKey);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error("Session check failed:", err);
             }
         })();
     </script>
