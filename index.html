@@ -248,6 +248,7 @@
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
+            white-space: nowrap;
         }
 
         .nav-links {
@@ -301,7 +302,9 @@
             border: none;
             display: inline-flex;
             align-items: center;
+            justify-content: center;
             gap: 8px;
+            white-space: nowrap;
         }
 
         .btn-ghost {
@@ -865,6 +868,7 @@
             display: flex;
             align-items: center;
             gap: 12px;
+            text-decoration: none;
         }
 
         .footer-brand img {
@@ -967,10 +971,30 @@
         }
 
         @media (max-width: 768px) {
+            .navbar {
+                padding: 12px 0;
+            }
 
-            .nav-links,
-            .nav-cta .btn-ghost {
+            .nav-links {
                 display: none;
+            }
+
+            .nav-cta {
+                gap: 8px;
+            }
+
+            .nav-cta .btn {
+                padding: 10px 16px;
+                font-size: 0.85rem;
+            }
+
+            .nav-brand span {
+                font-size: 1.1rem;
+            }
+
+            .nav-brand img {
+                width: 32px;
+                height: 32px;
             }
 
             .hero {
@@ -1025,6 +1049,48 @@
             }
         }
 
+        @media (max-width: 480px) {
+            .nav-brand-suffix {
+                display: none;
+            }
+
+            .nav-cta .btn {
+                padding: 8px 12px;
+                font-size: 0.8rem;
+            }
+
+            .stat-value {
+                font-size: 1.5rem;
+            }
+
+            .hero-cta {
+                flex-direction: column;
+                gap: 12px;
+                width: 100%;
+            }
+
+            .hero-cta .btn {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .hero-stats {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 20px;
+                text-align: center;
+            }
+
+            .stat-item:last-child {
+                grid-column: span 2;
+            }
+
+            .hero-badge {
+                padding: 6px 14px;
+                font-size: 0.75rem;
+            }
+        }
+
         /* ===== ANIMATIONS ===== */
         @keyframes pulse {
 
@@ -1076,12 +1142,20 @@
         <div class="orb orb-3"></div>
     </div> <!-- Navbar -->
     <nav class="navbar" id="navbar">
-        <div class="container"> <a href="#" class="nav-brand"> <img src="logo.png" alt="Promper Saver"> <span>Promper
-                    Saver</span> </a>
-            <div class="nav-links"> <a href="#features">Features</a> <a href="#how-it-works">How It Works</a> <a
-                    href="#testimonials">Testimonials</a> </div>
-            <div class="nav-cta"> <a href="app.html?auth=login" class="btn btn-ghost">Login</a> <a href="app.html"
-                    class="btn btn-primary">Get Started Free</a> </div>
+        <div class="container">
+            <a href="#" class="nav-brand">
+                <img src="logo.png" alt="Promper Saver">
+                <span>Promper<span class="nav-brand-suffix"> Saver</span></span>
+            </a>
+            <div class="nav-links">
+                <a href="#features">Features</a>
+                <a href="#how-it-works">How It Works</a>
+                <a href="#testimonials">Testimonials</a>
+            </div>
+            <div class="nav-cta">
+                <a href="app.html?auth=login" class="btn btn-ghost">Login</a>
+                <a href="app.html" class="btn btn-primary">Get Started Free</a>
+            </div>
         </div>
     </nav> <!-- Hero Section -->
     <section class="hero">

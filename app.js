@@ -1766,9 +1766,20 @@ async function syncFolders() {
 }
 
 async function createFolder(name) {
+  // Check for duplicate folder names (case-insensitive)
+  const normalizedName = name.trim().toLowerCase();
+  const isDuplicate = folders.some(f =>
+    !f.deleted && f.name.toLowerCase() === normalizedName
+  );
+
+  if (isDuplicate) {
+    showToast(`⚠️ Folder "${name}" already exists!`);
+    return false; // Return false to indicate failure
+  }
+
   const newFolder = {
     id: crypto.randomUUID(),
-    name: name,
+    name: name.trim(),
     user_id: user_session ? user_session.user.id : null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -1805,6 +1816,9 @@ async function createFolder(name) {
       }
     }
   }
+
+  showToast(`✅ Folder "${name}" created!`);
+  return true; // Return true to indicate success
 }
 
 async function deleteFolder(id) {
@@ -1849,6 +1863,43 @@ async function deleteFolder(id) {
     }
     await query;
   }
+}
+
+function reorderFolders(draggedId, targetId) {
+  // Find the dragged and target folders
+  const draggedIndex = folders.findIndex(f => f.id === draggedId);
+  const targetIndex = folders.findIndex(f => f.id === targetId);
+
+  if (draggedIndex === -1 || targetIndex === -1) return;
+
+  // Remove dragged folder from array
+  const [draggedFolder] = folders.splice(draggedIndex, 1);
+
+  // Find new target index after removal
+  const newTargetIndex = folders.findIndex(f => f.id === targetId);
+
+  // Insert at new position
+  folders.splice(newTargetIndex, 0, draggedFolder);
+
+  // Update order property for all folders
+  folders.forEach((f, index) => {
+    f.order = index;
+  });
+
+  // Save to localStorage
+  localStorage.setItem('folders', JSON.stringify(folders));
+
+  // Visual update
+  renderFolderStream();
+
+  // Sync to cloud
+  if (supabaseClient) {
+    syncLocalFoldersToCloud().catch(err => {
+      console.warn('Failed to sync folder order:', err);
+    });
+  }
+
+  showToast('📁 Folder order updated');
 }
 
 async function syncLocalFoldersToCloud() {
@@ -1913,11 +1964,24 @@ function renderFolderStream() {
   };
   container.appendChild(allPill);
 
-  // 2. Folder Pills
-  folders.filter(f => f.deleted !== true).forEach(f => {
+  // 2. Sort folders by order property (if exists), otherwise by created_at
+  const sortedFolders = folders
+    .filter(f => f.deleted !== true)
+    .sort((a, b) => {
+      const orderA = a.order !== undefined ? a.order : 999999;
+      const orderB = b.order !== undefined ? b.order : 999999;
+      if (orderA !== orderB) return orderA - orderB;
+      // Fallback to created_at if orders are equal
+      return new Date(a.created_at) - new Date(b.created_at);
+    });
+
+  // 3. Folder Pills with Drag & Drop
+  sortedFolders.forEach((f, index) => {
     const pill = document.createElement('div');
     pill.className = `folder-pill ${activeFolderId === f.id ? 'active' : ''}`;
     pill.innerHTML = `<span class="icon">📁</span> <span class="text">${escapeHtml(f.name)}</span>`;
+    pill.draggable = true;
+    pill.dataset.folderId = f.id;
 
     // Select
     pill.onclick = () => {
@@ -1930,6 +1994,58 @@ function renderFolderStream() {
     pill.oncontextmenu = (e) => {
       e.preventDefault();
       deleteFolder(f.id);
+    };
+
+    // Drag start
+    pill.ondragstart = (e) => {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', f.id);
+      pill.classList.add('dragging');
+
+      // Visual feedback
+      setTimeout(() => {
+        pill.style.opacity = '0.4';
+      }, 0);
+    };
+
+    // Drag end
+    pill.ondragend = (e) => {
+      pill.classList.remove('dragging');
+      pill.style.opacity = '1';
+
+      // Remove all drag-over classes
+      document.querySelectorAll('.folder-pill').forEach(p => {
+        p.classList.remove('drag-over');
+      });
+    };
+
+    // Drag over
+    pill.ondragover = (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+
+      // Add visual indicator
+      if (!pill.classList.contains('dragging')) {
+        pill.classList.add('drag-over');
+      }
+    };
+
+    // Drag leave
+    pill.ondragleave = (e) => {
+      pill.classList.remove('drag-over');
+    };
+
+    // Drop
+    pill.ondrop = (e) => {
+      e.preventDefault();
+      pill.classList.remove('drag-over');
+
+      const draggedId = e.dataTransfer.getData('text/plain');
+      const targetId = f.id;
+
+      if (draggedId !== targetId) {
+        reorderFolders(draggedId, targetId);
+      }
     };
 
     container.appendChild(pill);

@@ -2868,6 +2868,33 @@ body.dark-mode .folder-pill.active:hover {
     transform: translateY(-2px);
 }
 
+/* Drag and Drop States */
+.folder-pill.dragging {
+    opacity: 0.4;
+    cursor: grabbing;
+}
+
+.folder-pill.drag-over {
+    background: rgba(74, 144, 226, 0.15);
+    border-color: var(--primary-color);
+    transform: scale(1.05);
+    box-shadow: 0 4px 15px rgba(74, 144, 226, 0.3);
+}
+
+body.dark-mode .folder-pill.drag-over {
+    background: rgba(107, 163, 255, 0.2);
+    border-color: var(--primary-color);
+    box-shadow: 0 4px 15px rgba(107, 163, 255, 0.4);
+}
+
+.folder-pill[draggable="true"] {
+    cursor: grab;
+}
+
+.folder-pill[draggable="true"]:active {
+    cursor: grabbing;
+}
+
 .folder-add-pill {
     width: 32px;
     height: 32px;
